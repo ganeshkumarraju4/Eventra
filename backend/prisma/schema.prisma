@@ -1,0 +1,141 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Category {
+  CONFERENCE
+  WORKSHOP
+  SEMINAR
+  CONCERT
+  SPORTS
+  OTHER
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum RegistrationMode {
+  OPEN
+  APPROVAL_REQUIRED
+}
+
+enum EventType {
+  PUBLIC
+  PRIVATE
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(USER)
+
+  events        Event[]
+  bookings      Booking[]
+  registrations Registration[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Venue {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  name      String
+  location  String
+  capacity  Int
+
+  bookings Booking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Event {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  title       String
+  description String
+
+  startTime DateTime
+  endTime   DateTime
+
+  category Category
+  type     EventType
+
+  registrationMode RegistrationMode
+  maxParticipants  Int?
+
+  organizerId String
+  organizer   User   @relation(fields: [organizerId], references: [id])
+
+  booking       Booking?
+  registrations Registration[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Booking {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  userId String
+  user   User @relation(fields: [userId], references: [id])
+
+  eventId String @unique
+  event   Event @relation(fields: [eventId], references: [id])
+
+  venueId String
+  venue   Venue @relation(fields: [venueId], references: [id])
+
+  startTime DateTime
+  endTime   DateTime
+
+  status BookingStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Registration {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  userId String
+  user   User @relation(fields: [userId], references: [id])
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id])
+
+  status RegistrationStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, eventId])
+}
