@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../utils/prisma";
-import { hashPassword } from "../utils/password";
+import { hashPassword, comparePassword } from "../utils/password";
 
 export async function register(req: Request, res: Response) {
     try {
@@ -47,6 +47,43 @@ export async function register(req: Request, res: Response) {
     } catch (error) {
         console.error("Registration error:", error);
 
+        return res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+}
+
+export async function login(req: Request, res: Response) {
+    try{
+        const {email , password} = req.body;
+        const user = await prisma.user.findUnique({
+            where:{
+                email:email,
+            },
+        });
+        if(!user){
+            return res.status(401).json({
+                message: "User doesn't exist"
+            });
+        }
+        const hashedPassword = user.password;
+        const isPasswordValid = await comparePassword(password, hashedPassword);
+
+        if(!isPasswordValid){
+            return res.status(401).json({
+                message:"Invalid password"
+            });
+        }
+
+         return res.status(200).json({
+            message: "User logged in successfully",
+            user: {
+               email: user.email,
+            },
+        });
+    }
+    catch(error){
+        console.error("Login error:", error);
         return res.status(500).json({
             message: "Internal server error"
         });
