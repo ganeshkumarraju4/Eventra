@@ -2,7 +2,17 @@ import { Request, Response } from "express";
 import prisma from "../utils/prisma";
 import { hashPassword, comparePassword } from "../utils/password";
 import { generateToken } from "../utils/jwt";
-
+export async function getMe(req: Request, res: Response) {
+    return res.status(200).json({
+        message: "Authenticated user",
+        user: {
+            id: req.user?.id,
+            name: req.user?.name,
+            email: req.user?.email,
+            role: req.user?.role,
+        }
+    });
+}
 export async function register(req: Request, res: Response) {
     try {
         const { name, email, password } = req.body;
