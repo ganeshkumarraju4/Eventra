@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../utils/prisma";
 import { hashPassword, comparePassword } from "../utils/password";
+import { generateToken } from "../utils/jwt";
 
 export async function register(req: Request, res: Response) {
     try {
@@ -66,8 +67,8 @@ export async function login(req: Request, res: Response) {
                 message: "User doesn't exist"
             });
         }
-        const hashedPassword = user.password;
-        const isPasswordValid = await comparePassword(password, hashedPassword);
+        
+        const isPasswordValid = await comparePassword(password, user.password);
 
         if(!isPasswordValid){
             return res.status(401).json({
@@ -75,12 +76,16 @@ export async function login(req: Request, res: Response) {
             });
         }
 
-         return res.status(200).json({
+          const token = generateToken(user.id, user.role);
+
+        return res.status(200).json({
             message: "User logged in successfully",
+            token: token,
             user: {
-               email: user.email,
+                email: user.email,
             },
         });
+
     }
     catch(error){
         console.error("Login error:", error);
