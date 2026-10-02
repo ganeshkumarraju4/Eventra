@@ -8,5 +8,5 @@ app.use(express.json());
 
 app.use("/api/auth", authRouter);
 app.use("/api/events", eventRouter);
-
+console.log("EVENT ROUTES LOADED");
 export default app;

@@ -11,7 +11,8 @@ export async function createEvent(req: Request, res: Response) {
             category,
             type,
             registrationMode,
-            maxParticipants
+            maxParticipants,
+            venueId
         } = req.body;
 
         if (
@@ -21,10 +22,47 @@ export async function createEvent(req: Request, res: Response) {
             !endTime ||
             !category ||
             !type ||
-            !registrationMode
+            !registrationMode ||
+            !venueId
         ) {
             return res.status(400).json({
                 message: "All required fields must be provided"
+            });
+        }
+        if (type !== "PUBLIC" && type !== "PRIVATE") {
+    return res.status(400).json({
+        message: "Type must be either PUBLIC or PRIVATE"
+    });
+}
+
+        const venue = await prisma.venue.findUnique({
+            where: {
+                id: venueId
+            }
+        });
+
+        if (!venue) {
+            return res.status(404).json({
+                message: "Venue not found"
+            });
+        }
+
+        if (
+            maxParticipants !== undefined &&
+            maxParticipants !== null &&
+            maxParticipants <= 0
+        ) {
+            return res.status(400).json({
+                message: "Maximum participants must be greater than 0"
+            });
+        }
+         if (
+            maxParticipants !== undefined &&
+            maxParticipants !== null &&
+            maxParticipants > venue.capacity
+        ) {
+            return res.status(400).json({
+                message: "Maximum participants cannot exceed venue capacity"
             });
         }
        
@@ -43,24 +81,56 @@ export async function createEvent(req: Request, res: Response) {
             });
         }
 
-        const event = await prisma.event.create({
-            data: {
-                title,
-                description,
-                startTime: start,
-                endTime: end,
-                category,
-                type,
-                registrationMode,
-                maxParticipants,
-                organizerId: req.user!.id,
-                status: "PENDING"
+        const conflictingBooking = await prisma.booking.findFirst({
+            where: {
+                venueId,
+                startTime: {
+                    lt: end
+                },
+                endTime: {
+                    gt: start
+                }
             }
         });
-        return res.status(201).json({
-            message: "Event submitted for admin approval",
-            event
-        });
+        if (conflictingBooking) {
+            return res.status(409).json({
+                message: "The venue is already booked for the selected time slot"
+            });
+        }
+        const result = await prisma.$transaction(async (tx) => {
+
+    const event = await tx.event.create({
+        data: {
+            title,
+            description,
+            startTime: start,
+            endTime: end,
+            category,
+            type,
+            registrationMode,
+            maxParticipants,
+            organizerId: req.user!.id,
+            status: "PENDING"
+        }
+    });
+
+    const booking = await tx.booking.create({
+        data: {
+            eventId: event.id,
+            venueId,
+            startTime: start,
+            endTime: end
+        }
+    });
+
+    return { event, booking };
+});
+return res.status(201).json({
+    message: "Event submitted for admin approval",
+    event: result.event,
+    booking: result.booking
+});
+       
         
     } catch (error) {
         console.error(error);
@@ -155,6 +225,31 @@ export async function rejectEvent(req: Request, res: Response) {
 
         return res.status(500).json({
             message: "Internal server error"
+        });
+    }
+}
+
+export async function getApprovedEvents(req: Request, res: Response) {
+    try {
+        const events = await prisma.event.findMany({
+            where: {
+                status: "APPROVED"
+            },
+            orderBy: {
+                startTime: "asc"
+            }
+        });
+
+        return res.status(200).json({
+            message: "Approved events fetched successfully",
+            events
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        return res.status(500).json({
+            message: "Failed to fetch approved events"
         });
     }
 }

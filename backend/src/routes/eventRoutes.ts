@@ -2,7 +2,8 @@ import { Router } from "express";
 import {
     createEvent,
     approveEvent,
-    rejectEvent
+    rejectEvent,
+    getApprovedEvents
 } from "../controllers/eventController";
 
 import { authMiddleware } from "../middleware/authMiddleware";
@@ -25,5 +26,6 @@ router.patch(
     adminMiddleware,
     rejectEvent
 );
-
+router.get("/", authMiddleware, getApprovedEvents);
+console.log("eventRoutes loaded");
 export default router;

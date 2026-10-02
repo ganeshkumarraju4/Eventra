@@ -12,7 +12,6 @@ datasource db {
   provider = "mysql"
 }
 
-
 enum Role {
   USER
   ADMIN
@@ -24,15 +23,11 @@ enum Category {
   SEMINAR
   CONCERT
   SPORTS
+  TECHNICAL
   OTHER
 }
 
-enum BookingStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  CANCELLED
-}
+
 
 enum RegistrationStatus {
   PENDING
@@ -58,14 +53,13 @@ enum EventStatus {
 }
 
 model User {
-  id        String   @id @default(uuid()) @db.VarChar(36)
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     @default(USER)
+  id       String @id @default(uuid()) @db.VarChar(36)
+  name     String
+  email    String @unique
+  password String
+  role     Role   @default(USER)
 
   events        Event[]
-  bookings      Booking[]
   registrations Registration[]
 
   createdAt DateTime @default(now())
@@ -73,10 +67,10 @@ model User {
 }
 
 model Venue {
-  id        String   @id @default(uuid()) @db.VarChar(36)
-  name      String
-  location  String
-  capacity  Int
+  id       String @id @default(uuid()) @db.VarChar(36)
+  name     String
+  location String
+  capacity Int
 
   bookings Booking[]
 
@@ -85,7 +79,7 @@ model Venue {
 }
 
 model Event {
-  id          String   @id @default(uuid()) @db.VarChar(36)
+  id          String @id @default(uuid()) @db.VarChar(36)
   title       String
   description String
 
@@ -113,19 +107,14 @@ model Event {
 model Booking {
   id String @id @default(uuid()) @db.VarChar(36)
 
-  userId String
-  user   User @relation(fields: [userId], references: [id])
-
   eventId String @unique
-  event   Event @relation(fields: [eventId], references: [id])
+  event   Event  @relation(fields: [eventId], references: [id])
 
   venueId String
-  venue   Venue @relation(fields: [venueId], references: [id])
+  venue   Venue  @relation(fields: [venueId], references: [id])
 
   startTime DateTime
   endTime   DateTime
-
-  status BookingStatus @default(PENDING)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -135,10 +124,10 @@ model Registration {
   id String @id @default(uuid()) @db.VarChar(36)
 
   userId String
-  user   User @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 
   eventId String
-  event   Event @relation(fields: [eventId], references: [id])
+  event   Event  @relation(fields: [eventId], references: [id])
 
   status RegistrationStatus @default(PENDING)
 
