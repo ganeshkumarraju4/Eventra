@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createRegistration ,approveRegistration, rejectRegistration, getMyRegistrations} from "../controllers/registrationController";
+import { createRegistration ,approveRegistration, rejectRegistration, getMyRegistrations, getEventRegistrations} from "../controllers/registrationController";
 import { authMiddleware } from "../middleware/authMiddleware";
 
 const router = Router();
@@ -17,5 +17,5 @@ router.patch(
     rejectRegistration
 );
 router.get("/my",authMiddleware,getMyRegistrations);
-
+router.get("/event/:eventId",authMiddleware,getEventRegistrations);
 export default router;

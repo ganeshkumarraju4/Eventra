@@ -3,7 +3,8 @@ import {
     createEvent,
     approveEvent,
     rejectEvent,
-    getApprovedEvents
+    getApprovedEvents,
+    getEvent
 } from "../controllers/eventController";
 
 import { authMiddleware } from "../middleware/authMiddleware";
@@ -12,6 +13,12 @@ import { adminMiddleware } from "../middleware/adminMiddleware";
 const router = Router();
 
 router.post("/", authMiddleware, createEvent);
+
+router.get(
+    "/:eventId",
+    authMiddleware,
+    getEvent
+);
 
 router.patch(
     "/:eventId/approve",

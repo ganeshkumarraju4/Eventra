@@ -253,3 +253,34 @@ export async function getApprovedEvents(req: Request, res: Response) {
         });
     }
 }
+
+export async function getEvent(req: Request, res: Response) {
+    try{
+        const eventId = String(req.params.eventId);
+
+        if(!eventId){
+            return res.status(400).json({
+                message: "Event ID is required"
+            });
+        }
+        const event  = await prisma.event.findUnique({
+            where: {
+                id: eventId
+            }
+        });
+        if(!event){
+            return res.status(404).json({
+                message: "Event not found"
+            });
+        }
+        return res.status(200).json({
+            message: "Event fetched successfully",
+            event
+        });
+    }
+    catch(error){
+        return res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+}

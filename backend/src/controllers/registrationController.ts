@@ -247,3 +247,58 @@ export async function getMyRegistrations(req: Request, res: Response) {
         });
     }
 }
+export async function getEventRegistrations(req: Request, res: Response) {
+    try {
+        const { eventId } = req.params as { eventId: string };
+        const userId = req.user.id;
+
+        if (!eventId) {
+            return res.status(400).json({
+                message: "Event ID is required"
+            });
+        }
+
+        const event = await prisma.event.findUnique({
+            where: {
+                id: eventId
+            }
+        });
+
+        if (!event) {
+            return res.status(404).json({
+                message: "Event not found"
+            });
+        }
+
+        // Only the event organizer can view registrations
+        if (event.organizerId !== userId) {
+            return res.status(403).json({
+                message: "You are not the organizer of this event"
+            });
+        }
+
+        const registrations = await prisma.registration.findMany({
+            where: {
+                eventId
+            },
+            include: {
+                user: true
+            },
+            orderBy: {
+                createdAt: "desc"
+            }
+        });
+
+        return res.status(200).json({
+            message: "Event registrations fetched successfully",
+            registrations
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        return res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+}
