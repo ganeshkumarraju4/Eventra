@@ -27,7 +27,6 @@ enum Category {
   OTHER
 }
 
-
 enum RegistrationStatus {
   PENDING
   APPROVED
@@ -49,6 +48,18 @@ enum EventStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum FieldType {
+  TEXT
+  NUMBER
+  EMAIL
+  PHONE
+  URL
+  DATE
+  SELECT
+  CHECKBOX
+  TEXTAREA
 }
 
 model User {
@@ -96,8 +107,9 @@ model Event {
   organizerId String
   organizer   User   @relation(fields: [organizerId], references: [id])
 
-  booking       Booking?
-  registrations Registration[]
+  booking            Booking?
+  registrations      Registration[]
+  registrationFields RegistrationField[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -128,10 +140,47 @@ model Registration {
   eventId String
   event   Event  @relation(fields: [eventId], references: [id])
 
-  status RegistrationStatus @default(PENDING)
+  status  RegistrationStatus   @default(PENDING)
+  answers RegistrationAnswer[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([userId, eventId])
+}
+
+model RegistrationField {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  label       String
+  fieldType   FieldType
+  required    Boolean   @default(false)
+  placeholder String?
+  options     Json?
+  order       Int
+
+  answers RegistrationAnswer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RegistrationAnswer {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  registrationId String
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  fieldId String
+  field   RegistrationField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  value Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([registrationId, fieldId])
 }
