@@ -178,31 +178,38 @@ export async function approveEvent(req: Request, res: Response) {
     try {
         const eventId = String(req.params.eventId);
 
-        const event = await prisma.event.findUnique({
+        const result = await prisma.event.updateMany({
             where: {
-                id: eventId
+                id: eventId,
+                status: "PENDING"
+            },
+            data: {
+                status: "APPROVED"
             }
         });
 
-        if (!event) {
-            return res.status(404).json({
-                message: "Event not found"
+        if (result.count === 0) {
+            const event = await prisma.event.findUnique({
+                where: { id: eventId },
+                select: {
+                    id: true,
+                    status: true
+                }
             });
-        }
 
-        if (event.status !== "PENDING") {
+            if (!event) {
+                return res.status(404).json({
+                    message: "Event not found"
+                });
+            }
+
             return res.status(400).json({
                 message: "Only pending events can be approved"
             });
         }
 
-        const updatedEvent = await prisma.event.update({
-            where: {
-                id: eventId
-            },
-            data: {
-                status: "APPROVED"
-            }
+        const updatedEvent = await prisma.event.findUnique({
+            where: { id: eventId }
         });
 
         return res.status(200).json({
@@ -211,7 +218,7 @@ export async function approveEvent(req: Request, res: Response) {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Approve event error:", error);
 
         return res.status(500).json({
             message: "Internal server error"
@@ -471,6 +478,23 @@ export async function cancelEvent(req: Request, res: Response) {
         }
 
         const result = await prisma.$transaction(async (tx) => {
+
+            // 1. Find the event's current booking.
+            const booking = await tx.booking.findUnique({
+                where: { eventId }
+            });
+
+            // 2. Lock its venue before modifying the booking.
+            if (booking) {
+                await tx.$queryRaw<{ id: string }[]>`
+                    SELECT id
+                    FROM Venue
+                    WHERE id = ${booking.venueId}
+                    FOR UPDATE
+                `;
+            }
+
+            // 3. Cancel the event.
             const updatedEvent = await tx.event.update({
                 where: { id: eventId },
                 data: {
@@ -478,6 +502,7 @@ export async function cancelEvent(req: Request, res: Response) {
                 }
             });
 
+            // 4. Cancel active registrations.
             const registrations = await tx.registration.updateMany({
                 where: {
                     eventId,
@@ -490,28 +515,30 @@ export async function cancelEvent(req: Request, res: Response) {
                 }
             });
 
-            const booking = await tx.booking.deleteMany({
-                where: {
-                    eventId
-                }
+            // 5. Release the booking.
+            const deletedBookings = await tx.booking.deleteMany({
+                where: { eventId }
             });
-            
-           const rejectedRequests = await tx.eventChangeRequest.updateMany({
-                where: {
-                    eventId,
-                    status: "PENDING"
-                },
-                data: {
-                    status: "REJECTED",
-                    reviewComment: "Event was cancelled by the organizer.",
-                    reviewedAt: new Date()
-                }
-            });
+
+            // 6. Reject pending change requests.
+            const rejectedRequests =
+                await tx.eventChangeRequest.updateMany({
+                    where: {
+                        eventId,
+                        status: "PENDING"
+                    },
+                    data: {
+                        status: "REJECTED",
+                        reviewComment:
+                            "Event was cancelled by the organizer.",
+                        reviewedAt: new Date()
+                    }
+                });
 
             return {
                 event: updatedEvent,
                 cancelledRegistrations: registrations.count,
-                releasedBookings: booking.count,
+                releasedBookings: deletedBookings.count,
                 rejectedRequests: rejectedRequests.count
             };
         });

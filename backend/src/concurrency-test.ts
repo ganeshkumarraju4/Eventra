@@ -1,31 +1,49 @@
 const baseUrl = "http://localhost:3001/api/events";
-const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzZTA1YmZjYS1mMTNhLTQ1MWYtOGI3OC1mNzEyYWYxNGQ5MTYiLCJyb2xlIjoiVVNFUiIsImlhdCI6MTc5MTg4OTM1OCwiZXhwIjoxNzkxODkyOTU4fQ.7Mz0fRtf-IX3qfY0xLE4ITZeERSPRn1KSi5KKdGj0zs";
-const venueId = "261a7669-60b3-413d-b0c0-afd21b7645f8";
 
-const eventData = (title: string) => ({
-    title,
-    description: "Concurrent booking test",
-    startTime: "2026-11-10T10:00:00.000Z",
-    endTime: "2026-11-10T12:00:00.000Z",
-    category: "TECHNICAL",
-    type: "PUBLIC",
-    registrationMode: "OPEN",
-    maxParticipants: 50,
-    venueId
-});
+const adminToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3ZjVkZDA5MS0zMTlhLTQ0NjEtYjliMy0xMjVjOWM5YThhZDEiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3OTE4OTM1OTUsImV4cCI6MTc5MTg5NzE5NX0.UA5FwsxSZ2PpFhMdjT07TUuomtFvs7IbetQk6WPwxyM";
 
-async function sendRequest(title: string) {
-    const response = await fetch(baseUrl, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(eventData(title))
-    });
+// Event that is currently PENDING
+const pendingEventId = "fdcdc7c2-39b4-4cd8-9639-3a3100e0d7e1";
+
+// Change request belonging to an already APPROVED event
+const changeRequestId = "cfae624a-f433-4e2d-bf87-990a74a98b83";
+
+async function approveEvent() {
+    const response = await fetch(
+        `${baseUrl}/${pendingEventId}/approve`,
+        {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${adminToken}`
+            }
+        }
+    );
 
     return {
-        event: title,
+        operation: "Approve pending event",
+        status: response.status,
+        body: await response.json()
+    };
+}
+
+async function approveChangeRequest() {
+    const response = await fetch(
+        `${baseUrl}/admin/change-requests/${changeRequestId}/approve`,
+        {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${adminToken}`
+            },
+            body: JSON.stringify({
+                reviewComment: "Concurrent booking test"
+            })
+        }
+    );
+
+    return {
+        operation: "Approve event change request",
         status: response.status,
         body: await response.json()
     };
@@ -33,8 +51,8 @@ async function sendRequest(title: string) {
 
 async function main() {
     const results = await Promise.all([
-        sendRequest("Concurrent Event A"),
-        sendRequest("Concurrent Event B")
+        approveEvent(),
+        approveChangeRequest()
     ]);
 
     console.dir(results, { depth: null });

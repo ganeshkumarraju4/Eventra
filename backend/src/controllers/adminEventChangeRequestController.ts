@@ -44,11 +44,11 @@ export async function approveEventChangeRequest(
     res: Response
 ) {
     try {
-         const requestId = String(req.params.requestId);
+        const requestId = String(req.params.requestId);
         const adminId = req.user.id;
         const { reviewComment } = req.body;
 
-       const changeRequest = await prisma.eventChangeRequest.findUnique({
+        const changeRequest = await prisma.eventChangeRequest.findUnique({
             where: { id: requestId },
             include: {
                 event: {
@@ -84,22 +84,39 @@ export async function approveEventChangeRequest(
             });
         }
 
-        if (
-            changeRequest.event.maxParticipants !== null &&
-            changeRequest.event.maxParticipants >
-                changeRequest.requestedVenue.capacity
-        ) {
-            return res.status(400).json({
-                message: "Event participant limit exceeds the requested venue capacity"
-            });
-        }
-
         const result = await prisma.$transaction(async (tx) => {
-            // Check whether the requested venue and time slot are still available.
+
+            // 1. Lock the requested venue.
+            const lockedVenues = await tx.$queryRaw<
+                { id: string; capacity: number }[]
+            >`
+                SELECT id, capacity
+                FROM Venue
+                WHERE id = ${changeRequest.requestedVenueId}
+                FOR UPDATE
+            `;
+
+            if (lockedVenues.length === 0) {
+                throw new Error("REQUESTED_VENUE_NOT_FOUND");
+            }
+
+            const requestedVenue = lockedVenues[0];
+
+            // 2. Check capacity using the locked venue's current capacity.
+            if (
+                changeRequest.event.maxParticipants !== null &&
+                changeRequest.event.maxParticipants > requestedVenue.capacity
+            ) {
+                throw new Error("VENUE_CAPACITY_EXCEEDED");
+            }
+
+            // 3. Check availability while holding the venue lock.
             const conflictingBooking = await tx.booking.findFirst({
                 where: {
                     venueId: changeRequest.requestedVenueId,
-                    eventId: { not: changeRequest.eventId },
+                    eventId: {
+                        not: changeRequest.eventId
+                    },
                     startTime: {
                         lt: changeRequest.requestedEndTime
                     },
@@ -113,18 +130,22 @@ export async function approveEventChangeRequest(
                 throw new Error("VENUE_TIME_CONFLICT");
             }
 
-            // Update the event's date and time.
+            // 4. Update the event's date and time.
             const updatedEvent = await tx.event.update({
-                where: { id: changeRequest.eventId },
+                where: {
+                    id: changeRequest.eventId
+                },
                 data: {
                     startTime: changeRequest.requestedStartTime,
                     endTime: changeRequest.requestedEndTime
                 }
             });
 
-            // Update its venue booking.
+            // 5. Update its venue booking.
             await tx.booking.update({
-                where: { eventId: changeRequest.eventId },
+                where: {
+                    eventId: changeRequest.eventId
+                },
                 data: {
                     venueId: changeRequest.requestedVenueId,
                     startTime: changeRequest.requestedStartTime,
@@ -132,9 +153,11 @@ export async function approveEventChangeRequest(
                 }
             });
 
-            // Mark the request as approved.
+            // 6. Mark the change request as approved.
             const updatedRequest = await tx.eventChangeRequest.update({
-                where: { id: requestId },
+                where: {
+                    id: requestId
+                },
                 data: {
                     status: "APPROVED",
                     reviewedById: adminId,
@@ -143,7 +166,10 @@ export async function approveEventChangeRequest(
                 }
             });
 
-            return { updatedEvent, updatedRequest };
+            return {
+                updatedEvent,
+                updatedRequest
+            };
         });
 
         return res.status(200).json({
@@ -151,17 +177,31 @@ export async function approveEventChangeRequest(
             event: result.updatedEvent,
             changeRequest: result.updatedRequest
         });
+
     } catch (error) {
-        if (
-            error instanceof Error &&
-            error.message === "VENUE_TIME_CONFLICT"
-        ) {
-            return res.status(409).json({
-                message: "The requested venue is already booked during this time"
-            });
+
+        if (error instanceof Error) {
+
+            if (error.message === "VENUE_TIME_CONFLICT") {
+                return res.status(409).json({
+                    message: "The requested venue is already booked during this time"
+                });
+            }
+
+            if (error.message === "VENUE_CAPACITY_EXCEEDED") {
+                return res.status(400).json({
+                    message: "Event participant limit exceeds the requested venue capacity"
+                });
+            }
+
+            if (error.message === "REQUESTED_VENUE_NOT_FOUND") {
+                return res.status(404).json({
+                    message: "Requested venue not found"
+                });
+            }
         }
 
-        console.error(error);
+        console.error("Approve event change request error:", error);
 
         return res.status(500).json({
             message: "Internal server error"
