@@ -284,3 +284,201 @@ export async function getEvent(req: Request, res: Response) {
         });
     }
 }
+export async function updateEvent(req: Request, res: Response) {
+try {
+const eventId = String(req.params.eventId);
+const userId = req.user!.id;
+
+
+    const { title, description, category } = req.body;
+
+    // Validate that at least one editable field was supplied.
+    if (
+        title === undefined &&
+        description === undefined &&
+        category === undefined
+    ) {
+        return res.status(400).json({
+            message: "At least one field must be provided for update"
+        });
+    }
+
+    // Validate title.
+    if (
+        title !== undefined &&
+        (typeof title !== "string" || title.trim().length === 0)
+    ) {
+        return res.status(400).json({
+            message: "Title must be a non-empty string"
+        });
+    }
+
+    // Validate description.
+    if (
+        description !== undefined &&
+        (
+            typeof description !== "string" ||
+            description.trim().length === 0
+        )
+    ) {
+        return res.status(400).json({
+            message: "Description must be a non-empty string"
+        });
+    }
+
+    // Validate category.
+    const allowedCategories = [
+        "CONFERENCE",
+        "WORKSHOP",
+        "SEMINAR",
+        "CONCERT",
+        "SPORTS",
+        "TECHNICAL",
+        "OTHER"
+    ];
+
+    if (
+        category !== undefined &&
+        (
+            typeof category !== "string" ||
+            !allowedCategories.includes(category)
+        )
+    ) {
+        return res.status(400).json({
+            message: "Invalid event category"
+        });
+    }
+
+    // Find the event.
+    const event = await prisma.event.findUnique({
+        where: { id: eventId }
+    });
+
+    if (!event) {
+        return res.status(404).json({
+            message: "Event not found"
+        });
+    }
+
+    // Verify event ownership.
+    if (event.organizerId !== userId) {
+        return res.status(403).json({
+            message: "You are not authorized to update this event"
+        });
+    }
+
+    // Reject updates to rejected events.
+    if (event.status === "REJECTED") {
+        return res.status(400).json({
+            message: "Rejected events cannot be updated"
+        });
+    }
+
+    // Update only explicitly supplied fields.
+    const updatedEvent = await prisma.event.update({
+        where: { id: eventId },
+        data: {
+            ...(title !== undefined && {
+                title: title.trim()
+            }),
+            ...(description !== undefined && {
+                description: description.trim()
+            }),
+            ...(category !== undefined && {
+                category
+            })
+        }
+    });
+
+    return res.status(200).json({
+        message: "Event updated successfully",
+        event: updatedEvent
+    });
+
+} catch (error) {
+    console.error("Update event error:", error);
+
+    return res.status(500).json({
+        message: "Internal server error"
+    });
+}
+}
+export async function cancelEvent(req: Request, res: Response) {
+    try {
+        const eventId = String(req.params.eventId);
+        const userId = req.user!.id;
+
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            return res.status(404).json({
+                message: "Event not found"
+            });
+        }
+
+        if (event.organizerId !== userId) {
+            return res.status(403).json({
+                message: "Only the event organizer can cancel this event"
+            });
+        }
+
+        if (event.status === "CANCELLED") {
+            return res.status(400).json({
+                message: "Event is already cancelled"
+            });
+        }
+
+        if (event.status === "REJECTED") {
+            return res.status(400).json({
+                message: "Rejected events cannot be cancelled"
+            });
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
+            const updatedEvent = await tx.event.update({
+                where: { id: eventId },
+                data: {
+                    status: "CANCELLED"
+                }
+            });
+
+            const registrations = await tx.registration.updateMany({
+                where: {
+                    eventId,
+                    status: {
+                        in: ["PENDING", "APPROVED"]
+                    }
+                },
+                data: {
+                    status: "CANCELLED"
+                }
+            });
+
+            const booking = await tx.booking.deleteMany({
+                where: {
+                    eventId
+                }
+            });
+
+            return {
+                event: updatedEvent,
+                cancelledRegistrations: registrations.count,
+                releasedBookings: booking.count
+            };
+        });
+
+        return res.status(200).json({
+            message: "Event cancelled successfully",
+            ...result
+        });
+
+    } catch (error) {
+        console.error("Cancel event error:", error);
+
+        return res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+}

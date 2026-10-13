@@ -48,6 +48,7 @@ enum EventStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED
 }
 
 enum ChangeRequestStatus {

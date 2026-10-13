@@ -4,7 +4,9 @@ import {
     approveEvent,
     rejectEvent,
     getApprovedEvents,
-    getEvent
+    getEvent,
+    updateEvent,
+    cancelEvent
 } from "../controllers/eventController";
 import {
     createEventChangeRequest, getMyEventChangeRequests
@@ -39,6 +41,16 @@ router.patch(
     authMiddleware,
     adminMiddleware,
     rejectEvent
+);
+router.patch(
+    "/:eventId",
+    authMiddleware,
+    updateEvent
+);
+router.patch(
+    "/:eventId/cancel",
+    authMiddleware,
+    cancelEvent
 );
 router.post(
     "/:eventId/change-requests",
