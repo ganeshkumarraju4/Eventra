@@ -50,6 +50,12 @@ enum EventStatus {
   REJECTED
 }
 
+enum ChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum FieldType {
   TEXT
   NUMBER
@@ -72,6 +78,8 @@ model User {
   events        Event[]
   registrations Registration[]
 
+  changeRequests EventChangeRequest[] @relation("ChangeRequestOrganizer")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -83,6 +91,8 @@ model Venue {
   capacity Int
 
   bookings Booking[]
+
+  changeRequests EventChangeRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -110,6 +120,8 @@ model Event {
   booking            Booking?
   registrations      Registration[]
   registrationFields RegistrationField[]
+
+  changeRequests EventChangeRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -183,4 +195,31 @@ model RegistrationAnswer {
   updatedAt DateTime @updatedAt
 
   @@unique([registrationId, fieldId])
+}
+
+model EventChangeRequest {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id])
+
+  requestedById String
+  requestedBy   User   @relation("ChangeRequestOrganizer", fields: [requestedById], references: [id])
+
+  requestedStartTime DateTime
+  requestedEndTime   DateTime
+
+  requestedVenueId String
+  requestedVenue   Venue  @relation(fields: [requestedVenueId], references: [id])
+
+  reason String?
+
+  status ChangeRequestStatus @default(PENDING)
+
+  reviewedById  String?
+  reviewedAt    DateTime?
+  reviewComment String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

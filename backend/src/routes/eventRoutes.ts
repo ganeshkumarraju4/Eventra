@@ -6,7 +6,9 @@ import {
     getApprovedEvents,
     getEvent
 } from "../controllers/eventController";
-
+import {
+    createEventChangeRequest
+} from "../controllers/eventChangeRequestController";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { adminMiddleware } from "../middleware/adminMiddleware";
 
@@ -33,6 +35,11 @@ router.patch(
     adminMiddleware,
     rejectEvent
 );
+router.post(
+    "/:eventId/change-requests",
+    authMiddleware,
+    createEventChangeRequest
+);
 router.get("/", authMiddleware, getApprovedEvents);
-console.log("eventRoutes loaded");
+
 export default router;
