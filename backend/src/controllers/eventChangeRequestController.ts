@@ -142,3 +142,52 @@ export async function createEventChangeRequest(
         });
     }
 }
+export async function getMyEventChangeRequests(
+    req: Request,
+    res: Response
+) {
+    try {
+        const eventId = String(req.params.eventId);
+        const userId = req.user.id;
+
+        const event = await prisma.event.findUnique({
+            where: { id: eventId }
+        });
+
+        if (!event) {
+            return res.status(404).json({
+                message: "Event not found"
+            });
+        }
+
+        if (event.organizerId !== userId) {
+            return res.status(403).json({
+                message: "Only the event organizer can view these requests"
+            });
+        }
+
+        const requests = await prisma.eventChangeRequest.findMany({
+            where: {
+                eventId,
+                requestedById: userId
+            },
+            include: {
+                requestedVenue: true
+            },
+            orderBy: {
+                createdAt: "desc"
+            }
+        });
+
+        return res.status(200).json({
+            message: "Event change requests fetched successfully",
+            requests
+        });
+    } catch (error) {
+        console.error(error);
+
+        return res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+}

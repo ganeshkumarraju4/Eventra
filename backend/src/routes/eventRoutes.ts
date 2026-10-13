@@ -7,10 +7,15 @@ import {
     getEvent
 } from "../controllers/eventController";
 import {
-    createEventChangeRequest
+    createEventChangeRequest, getMyEventChangeRequests
 } from "../controllers/eventChangeRequestController";
+import {
+    getPendingEventChangeRequests,approveEventChangeRequest,
+    rejectEventChangeRequest
+} from "../controllers/adminEventChangeRequestController";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { adminMiddleware } from "../middleware/adminMiddleware";
+
 
 const router = Router();
 
@@ -39,6 +44,29 @@ router.post(
     "/:eventId/change-requests",
     authMiddleware,
     createEventChangeRequest
+);
+router.get(
+    "/admin/change-requests",
+    authMiddleware,
+    adminMiddleware,
+    getPendingEventChangeRequests
+);
+router.patch(
+    "/admin/change-requests/:requestId/approve",
+    authMiddleware,
+    adminMiddleware,
+    approveEventChangeRequest
+);
+router.patch(
+    "/admin/change-requests/:requestId/reject",
+    authMiddleware,
+    adminMiddleware,
+    rejectEventChangeRequest
+);
+router.get(
+    "/:eventId/change-requests",
+    authMiddleware,
+    getMyEventChangeRequests
 );
 router.get("/", authMiddleware, getApprovedEvents);
 
