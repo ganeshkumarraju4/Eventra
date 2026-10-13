@@ -29,43 +29,13 @@ export async function createEvent(req: Request, res: Response) {
                 message: "All required fields must be provided"
             });
         }
+
         if (type !== "PUBLIC" && type !== "PRIVATE") {
-    return res.status(400).json({
-        message: "Type must be either PUBLIC or PRIVATE"
-    });
-}
-
-        const venue = await prisma.venue.findUnique({
-            where: {
-                id: venueId
-            }
-        });
-
-        if (!venue) {
-            return res.status(404).json({
-                message: "Venue not found"
-            });
-        }
-
-        if (
-            maxParticipants !== undefined &&
-            maxParticipants !== null &&
-            maxParticipants <= 0
-        ) {
             return res.status(400).json({
-                message: "Maximum participants must be greater than 0"
+                message: "Type must be either PUBLIC or PRIVATE"
             });
         }
-         if (
-            maxParticipants !== undefined &&
-            maxParticipants !== null &&
-            maxParticipants > venue.capacity
-        ) {
-            return res.status(400).json({
-                message: "Maximum participants cannot exceed venue capacity"
-            });
-        }
-       
+
         const start = new Date(startTime);
         const end = new Date(endTime);
 
@@ -81,59 +51,123 @@ export async function createEvent(req: Request, res: Response) {
             });
         }
 
-        const conflictingBooking = await prisma.booking.findFirst({
-            where: {
-                venueId,
-                startTime: {
-                    lt: end
-                },
-                endTime: {
-                    gt: start
-                }
-            }
-        });
-        if (conflictingBooking) {
-            return res.status(409).json({
-                message: "The venue is already booked for the selected time slot"
-            });
-        }
         const result = await prisma.$transaction(async (tx) => {
+            // 1. Lock the venue row until this transaction finishes.
+            const lockedVenue = await tx.$queryRaw<
+                { id: string; capacity: number }[]
+            >`
+                SELECT id, capacity
+                FROM Venue
+                WHERE id = ${venueId}
+                FOR UPDATE
+            `;
 
-    const event = await tx.event.create({
-        data: {
-            title,
-            description,
-            startTime: start,
-            endTime: end,
-            category,
-            type,
-            registrationMode,
-            maxParticipants,
-            organizerId: req.user!.id,
-            status: "PENDING"
-        }
-    });
+            if (lockedVenue.length === 0) {
+                throw new Error("VENUE_NOT_FOUND");
+            }
 
-    const booking = await tx.booking.create({
-        data: {
-            eventId: event.id,
-            venueId,
-            startTime: start,
-            endTime: end
-        }
-    });
+            const venue = lockedVenue[0];
 
-    return { event, booking };
-});
-return res.status(201).json({
-    message: "Event submitted for admin approval",
-    event: result.event,
-    booking: result.booking
-});
-       
-        
+            // 2. Validate participant limits using the locked venue.
+            if (
+                maxParticipants !== undefined &&
+                maxParticipants !== null &&
+                (
+                    typeof maxParticipants !== "number" ||
+                    !Number.isInteger(maxParticipants) ||
+                    maxParticipants <= 0
+                )
+            ) {
+                throw new Error("INVALID_MAX_PARTICIPANTS");
+            }
+
+            if (
+                maxParticipants !== undefined &&
+                maxParticipants !== null &&
+                maxParticipants > venue.capacity
+            ) {
+                throw new Error("CAPACITY_EXCEEDED");
+            }
+
+            // 3. Check availability while holding the venue lock.
+            const conflictingBooking = await tx.booking.findFirst({
+                where: {
+                    venueId,
+                    startTime: {
+                        lt: end
+                    },
+                    endTime: {
+                        gt: start
+                    }
+                }
+            });
+
+            if (conflictingBooking) {
+                throw new Error("VENUE_TIME_CONFLICT");
+            }
+
+            // 4. Create the event and booking atomically.
+            const event = await tx.event.create({
+                data: {
+                    title,
+                    description,
+                    startTime: start,
+                    endTime: end,
+                    category,
+                    type,
+                    registrationMode,
+                    maxParticipants,
+                    organizerId: req.user!.id,
+                    status: "PENDING"
+                }
+            });
+
+            const booking = await tx.booking.create({
+                data: {
+                    eventId: event.id,
+                    venueId,
+                    startTime: start,
+                    endTime: end
+                }
+            });
+
+            return { event, booking };
+        });
+
+        return res.status(201).json({
+            message: "Event submitted for admin approval",
+            event: result.event,
+            booking: result.booking
+        });
+
     } catch (error) {
-        console.error(error);
+        if (error instanceof Error) {
+            if (error.message === "VENUE_NOT_FOUND") {
+                return res.status(404).json({
+                    message: "Venue not found"
+                });
+            }
+
+            if (error.message === "INVALID_MAX_PARTICIPANTS") {
+                return res.status(400).json({
+                    message: "Maximum participants must be a positive integer"
+                });
+            }
+
+            if (error.message === "CAPACITY_EXCEEDED") {
+                return res.status(400).json({
+                    message: "Maximum participants cannot exceed venue capacity"
+                });
+            }
+
+            if (error.message === "VENUE_TIME_CONFLICT") {
+                return res.status(409).json({
+                    message: "The venue is already booked for the selected time slot"
+                });
+            }
+        }
+
+        console.error("Create event error:", error);
 
         return res.status(500).json({
             message: "Internal server error"
@@ -461,11 +495,24 @@ export async function cancelEvent(req: Request, res: Response) {
                     eventId
                 }
             });
+            
+           const rejectedRequests = await tx.eventChangeRequest.updateMany({
+                where: {
+                    eventId,
+                    status: "PENDING"
+                },
+                data: {
+                    status: "REJECTED",
+                    reviewComment: "Event was cancelled by the organizer.",
+                    reviewedAt: new Date()
+                }
+            });
 
             return {
                 event: updatedEvent,
                 cancelledRegistrations: registrations.count,
-                releasedBookings: booking.count
+                releasedBookings: booking.count,
+                rejectedRequests: rejectedRequests.count
             };
         });
 
