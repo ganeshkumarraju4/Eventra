@@ -223,73 +223,141 @@ export async function approveRegistration(req: Request, res: Response) {
         const { id: registrationId } = req.params as { id: string };
         const userId = req.user.id;
 
-        if(!registrationId) {
+        if (!registrationId) {
             return res.status(400).json({
                 message: "Registration ID is required"
             });
         }
 
-        const registration = await prisma.registration.findUnique({
-            where: {
-                id: registrationId
-            },
-            include: {
-                event: true
-            }
-        });
+        const result = await prisma.$transaction(async (tx) => {
 
-        if (!registration) {
-            return res.status(404).json({
-                message: "Registration not found"
-            });
-        }
-
-        // Only the event organizer can approve registrations
-        if (registration.event.organizerId !== userId) {
-            return res.status(403).json({
-                message: "You are not the organizer of this event"
-            });
-        }
-
-        // Only pending registrations can be approved
-        if (registration.status !== "PENDING") {
-            return res.status(400).json({
-                message: "Only pending registrations can be approved"
-            });
-        }
-
-        // Check capacity
-        if (registration.event.maxParticipants !== null) {
-            const approvedCount = await prisma.registration.count({
+            // 1. Find the registration and its event.
+            const registration = await tx.registration.findUnique({
                 where: {
-                    eventId: registration.eventId,
-                    status: "APPROVED"
+                    id: registrationId
+                },
+                include: {
+                    event: true
                 }
             });
 
-            if (approvedCount >= registration.event.maxParticipants) {
-                return res.status(400).json({
-                    message: "Event has reached its maximum capacity"
-                });
+            if (!registration) {
+                throw new Error("REGISTRATION_NOT_FOUND");
             }
-        }
 
-        const updatedRegistration = await prisma.registration.update({
-            where: {
-                id: registrationId
-            },
-            data: {
-                status: "APPROVED"
+            // 2. Only the event organizer can approve registrations.
+            if (registration.event.organizerId !== userId) {
+                throw new Error("NOT_EVENT_ORGANIZER");
             }
+
+            // 3. Lock the event row.
+            const lockedEvents = await tx.$queryRaw<
+                { id: string; maxParticipants: number | null }[]
+            >`
+                SELECT id, maxParticipants
+                FROM \`event\`
+                WHERE id = ${registration.eventId}
+                FOR UPDATE
+            `;
+
+            if (lockedEvents.length === 0) {
+                throw new Error("EVENT_NOT_FOUND");
+            }
+
+            const event = lockedEvents[0];
+
+            // 4. Recheck registration status after acquiring the lock.
+            const currentRegistration = await tx.registration.findUnique({
+                where: {
+                    id: registrationId
+                }
+            });
+
+            if (!currentRegistration) {
+                throw new Error("REGISTRATION_NOT_FOUND");
+            }
+
+            if (currentRegistration.status !== "PENDING") {
+                throw new Error("REGISTRATION_NOT_PENDING");
+            }
+
+            // 5. Count approved registrations while holding the lock.
+            if (event.maxParticipants !== null) {
+               const approvedRegistrations = await tx.$queryRaw<{ id: string }[]>`
+                SELECT id
+                FROM \`registration\`
+                WHERE \`eventId\` = ${registration.eventId}
+                AND status = 'APPROVED'
+                FOR UPDATE
+            `;
+
+            const approvedCount = approvedRegistrations.length;
+
+            console.log("Capacity check:", {
+                eventId: registration.eventId,
+                approvedCount,
+                maxParticipants: event.maxParticipants,
+            });
+
+            if (
+                event.maxParticipants !== null &&
+                approvedCount >= event.maxParticipants
+            ) {
+                throw new Error("EVENT_CAPACITY_REACHED");
+            }
+            }
+
+            // 6. Approve the registration.
+            return await tx.registration.update({
+                where: {
+                    id: registrationId
+                },
+                data: {
+                    status: "APPROVED"
+                }
+            });
         });
 
         return res.status(200).json({
             message: "Registration approved successfully",
-            registration: updatedRegistration
+            registration: result
         });
 
     } catch (error) {
-        console.error(error);
+        if (error instanceof Error) {
+
+            if (error.message === "REGISTRATION_NOT_FOUND") {
+                return res.status(404).json({
+                    message: "Registration not found"
+                });
+            }
+
+            if (error.message === "NOT_EVENT_ORGANIZER") {
+                return res.status(403).json({
+                    message: "You are not the organizer of this event"
+                });
+            }
+
+            if (error.message === "REGISTRATION_NOT_PENDING") {
+                return res.status(400).json({
+                    message: "Only pending registrations can be approved"
+                });
+            }
+
+            if (error.message === "EVENT_CAPACITY_REACHED") {
+                return res.status(400).json({
+                    message: "Event has reached its maximum capacity"
+                });
+            }
+
+            if (error.message === "EVENT_NOT_FOUND") {
+                return res.status(404).json({
+                    message: "Event not found"
+                });
+            }
+        }
+
+        console.error("Approve registration error:", error);
 
         return res.status(500).json({
             message: "Internal server error"
