@@ -24,9 +24,7 @@ export async function createRegistration(
         }
 
         const event = await prisma.event.findUnique({
-            where: {
-                id: eventId
-            }
+            where: { id: eventId }
         });
 
         if (!event) {
@@ -55,23 +53,17 @@ export async function createRegistration(
             });
         }
 
-        /*
-         * Fetch the registration form fields
-         */
+        // Fetch registration form fields.
         const fields = await prisma.registrationField.findMany({
-            where: {
-                eventId
-            },
-            orderBy: {
-                order: "asc"
-            }
+            where: { eventId },
+            orderBy: { order: "asc" }
         });
 
         const submittedAnswers = answers ?? [];
         const submittedFieldIds = new Set<string>();
 
+        // Validate submitted answers.
         for (const answer of submittedAnswers) {
-
             if (!answer.fieldId) {
                 return res.status(400).json({
                     message: "Field ID is required for every answer"
@@ -87,7 +79,7 @@ export async function createRegistration(
             submittedFieldIds.add(answer.fieldId);
 
             const field = fields.find(
-                (field) => field.id === answer.fieldId
+                field => field.id === answer.fieldId
             );
 
             if (!field) {
@@ -109,17 +101,8 @@ export async function createRegistration(
             }
         }
 
-        /*
-         * Check that every submitted field belongs
-         * to this event and validate its value.
-         */
-        
-
-        /*
-         * Check required fields
-         */
+        // Validate required fields.
         for (const field of fields) {
-
             if (!field.required) {
                 continue;
             }
@@ -133,8 +116,10 @@ export async function createRegistration(
                 answer.value === undefined ||
                 answer.value === null ||
                 answer.value === "" ||
-                (Array.isArray(answer.value) &&
-                    answer.value.length === 0)
+                (
+                    Array.isArray(answer.value) &&
+                    answer.value.length === 0
+                )
             ) {
                 return res.status(400).json({
                     message: `Required field missing: ${field.label}`
@@ -142,43 +127,97 @@ export async function createRegistration(
             }
         }
 
-        let registrationStatus: RegistrationStatus =
-            RegistrationStatus.PENDING;
+        const registration = await prisma.$transaction(
+            async (tx) => {
 
-        /*
-         * OPEN registration
-         */
-        if (event.registrationMode === "OPEN") {
+                /*
+                 * 1. Lock the event row.
+                 *
+                 * All operations that consume event capacity
+                 * must acquire this same lock.
+                 */
+                const lockedEvents = await tx.$queryRaw<
+                    { id: string; maxParticipants: number | null }[]
+                >`
+                    SELECT id, maxParticipants
+                    FROM \`event\`
+                    WHERE id = ${eventId}
+                    FOR UPDATE
+                `;
 
-            if (event.maxParticipants !== null) {
+                if (lockedEvents.length === 0) {
+                    throw new Error("EVENT_NOT_FOUND");
+                }
 
-                const approvedCount =
-                    await prisma.registration.count({
+                const lockedEvent = lockedEvents[0];
+
+                /*
+                 * 2. Check for an existing registration again
+                 * inside the transaction.
+                 */
+                const duplicate =
+                    await tx.registration.findFirst({
                         where: {
                             eventId,
-                            status: "APPROVED"
+                            userId
                         }
                     });
 
-                if (approvedCount >= event.maxParticipants) {
-                    return res.status(400).json({
-                        message:
-                            "Event has reached its maximum capacity"
-                    });
+                if (duplicate) {
+                    throw new Error("DUPLICATE_REGISTRATION");
                 }
-            }
 
-            registrationStatus =
-                RegistrationStatus.APPROVED;
-        }
+                let registrationStatus: RegistrationStatus =
+                    RegistrationStatus.PENDING;
 
-        /*
-         * Create registration and answers
-         * together.
-         */
-        const registration =
-            await prisma.$transaction(async (tx) => {
+                /*
+                 * 3. OPEN registrations consume capacity
+                 * immediately, so check capacity while
+                 * holding the event lock.
+                 */
+                if (event.registrationMode === "OPEN") {
 
+                    if (lockedEvent.maxParticipants !== null) {
+
+                        /*
+                         * Use a locking read so the count
+                         * reflects current committed data.
+                         */
+                        const approvedRegistrations =
+                            await tx.$queryRaw<{ id: string }[]>`
+                                SELECT id
+                                FROM \`registration\`
+                                WHERE \`eventId\` = ${eventId}
+                                  AND status = 'APPROVED'
+                                FOR UPDATE
+                            `;
+
+                        const approvedCount =
+                            approvedRegistrations.length;
+
+                        console.log("Open registration capacity check:", {
+                            eventId,
+                            approvedCount,
+                            maxParticipants:
+                                lockedEvent.maxParticipants
+                        });
+
+                        if (
+                            approvedCount >=
+                            lockedEvent.maxParticipants
+                        ) {
+                            throw new Error("EVENT_CAPACITY_REACHED");
+                        }
+                    }
+
+                    registrationStatus =
+                        RegistrationStatus.APPROVED;
+                }
+
+                /*
+                 * 4. Create registration and answers in
+                 * the same transaction.
+                 */
                 const newRegistration =
                     await tx.registration.create({
                         data: {
@@ -189,21 +228,20 @@ export async function createRegistration(
                     });
 
                 if (submittedAnswers.length > 0) {
-
                     await tx.registrationAnswer.createMany({
                         data: submittedAnswers.map(
                             (answer: any) => ({
-                                registrationId:
-                                    newRegistration.id,
+                                registrationId: newRegistration.id,
                                 fieldId: answer.fieldId,
                                 value: answer.value
                             })
-                        )}
-                    );
+                        )
+                    });
                 }
 
                 return newRegistration;
-            });
+            }
+        );
 
         return res.status(201).json({
             message: "Registration created successfully",
@@ -211,7 +249,29 @@ export async function createRegistration(
         });
 
     } catch (error) {
-        console.error(error);
+
+        if (error instanceof Error) {
+
+            if (error.message === "EVENT_NOT_FOUND") {
+                return res.status(404).json({
+                    message: "Event not found"
+                });
+            }
+
+            if (error.message === "DUPLICATE_REGISTRATION") {
+                return res.status(400).json({
+                    message: "You are already registered for this event"
+                });
+            }
+
+            if (error.message === "EVENT_CAPACITY_REACHED") {
+                return res.status(400).json({
+                    message: "Event has reached its maximum capacity"
+                });
+            }
+        }
+
+        console.error("Create registration error:", error);
 
         return res.status(500).json({
             message: "Internal server error"
