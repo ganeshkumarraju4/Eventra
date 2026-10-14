@@ -772,46 +772,76 @@ export async function cancelRegistration(
         const registrationId = String(req.params.registrationId);
         const userId = req.user.id;
 
-        // 1. Find the registration
-        const registration = await prisma.registration.findUnique({
-            where: {
-                id: registrationId
-            }
-        });
-
-        if (!registration) {
-            return res.status(404).json({
-                message: "Registration not found"
-            });
-        }
-
-        // 2. Check ownership
-        if (registration.userId !== userId) {
-            return res.status(403).json({
-                message: "You cannot cancel another user's registration"
-            });
-        }
-
-        // 3. Check registration status
-        if (
-            registration.status === "CANCELLED" ||
-            registration.status === "REJECTED"
-        ) {
+        if (!registrationId || registrationId === "undefined") {
             return res.status(400).json({
-                message: `Cannot cancel a ${registration.status.toLowerCase()} registration`
+                message: "Registration ID is required"
             });
         }
 
-        // 4. Cancel the registration
-        const cancelledRegistration =
-            await prisma.registration.update({
-                where: {
-                    id: registrationId
-                },
-                data: {
-                    status: "CANCELLED"
+        const cancelledRegistration = await prisma.$transaction(
+            async (tx) => {
+
+                // 1. Find the registration and its event.
+                const registration =
+                    await tx.registration.findUnique({
+                        where: {
+                            id: registrationId
+                        },
+                        include: {
+                            event: true
+                        }
+                    });
+
+                if (!registration) {
+                    throw new Error("REGISTRATION_NOT_FOUND");
                 }
-            });
+
+                // 2. Verify ownership.
+                if (registration.userId !== userId) {
+                    throw new Error("NOT_REGISTRATION_OWNER");
+                }
+
+                // 3. Lock the event row.
+                await tx.$queryRaw<{ id: string }[]>`
+                    SELECT id
+                    FROM \`event\`
+                    WHERE id = ${registration.eventId}
+                    FOR UPDATE
+                `;
+
+                // 4. Re-read the registration after acquiring
+                // the event lock.
+                const currentRegistration =
+                    await tx.registration.findUnique({
+                        where: {
+                            id: registrationId
+                        }
+                    });
+
+                if (!currentRegistration) {
+                    throw new Error("REGISTRATION_NOT_FOUND");
+                }
+
+                if (
+                    currentRegistration.status === "CANCELLED" ||
+                    currentRegistration.status === "REJECTED"
+                ) {
+                    throw new Error(
+                        `CANNOT_CANCEL_${currentRegistration.status}`
+                    );
+                }
+
+                // 5. Cancel within the same transaction.
+                return await tx.registration.update({
+                    where: {
+                        id: registrationId
+                    },
+                    data: {
+                        status: "CANCELLED"
+                    }
+                });
+            }
+        );
 
         return res.status(200).json({
             message: "Registration cancelled successfully",
@@ -819,7 +849,35 @@ export async function cancelRegistration(
         });
 
     } catch (error) {
-        console.error(error);
+
+        if (error instanceof Error) {
+
+            if (error.message === "REGISTRATION_NOT_FOUND") {
+                return res.status(404).json({
+                    message: "Registration not found"
+                });
+            }
+
+            if (error.message === "NOT_REGISTRATION_OWNER") {
+                return res.status(403).json({
+                    message: "You cannot cancel another user's registration"
+                });
+            }
+
+            if (error.message === "CANNOT_CANCEL_CANCELLED") {
+                return res.status(400).json({
+                    message: "Cannot cancel a cancelled registration"
+                });
+            }
+
+            if (error.message === "CANNOT_CANCEL_REJECTED") {
+                return res.status(400).json({
+                    message: "Cannot cancel a rejected registration"
+                });
+            }
+        }
+
+        console.error("Cancel registration error:", error);
 
         return res.status(500).json({
             message: "Internal server error"
