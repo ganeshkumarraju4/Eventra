@@ -811,12 +811,20 @@ export async function cancelRegistration(
 
                 // 4. Re-read the registration after acquiring
                 // the event lock.
-                const currentRegistration =
-                    await tx.registration.findUnique({
-                        where: {
-                            id: registrationId
-                        }
-                    });
+                const currentRegistrations = await tx.$queryRaw<
+                        { id: string; userId: string; status: string }[]
+                    >`
+                        SELECT id, userId, status
+                        FROM \`registration\`
+                        WHERE id = ${registrationId}
+                        FOR UPDATE
+                    `;
+
+                    if (currentRegistrations.length === 0) {
+                        throw new Error("REGISTRATION_NOT_FOUND");
+                    }
+
+                const currentRegistration = currentRegistrations[0];
 
                 if (!currentRegistration) {
                     throw new Error("REGISTRATION_NOT_FOUND");
