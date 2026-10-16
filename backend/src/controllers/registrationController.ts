@@ -136,10 +136,15 @@ export async function createRegistration(
                  * All operations that consume event capacity
                  * must acquire this same lock.
                  */
-                const lockedEvents = await tx.$queryRaw<
-                    { id: string; maxParticipants: number | null }[]
+              const lockedEvents = await tx.$queryRaw<
+                    {
+                        id: string;
+                        maxParticipants: number | null;
+                        status: string;
+                        registrationMode: string;
+                    }[]
                 >`
-                    SELECT id, maxParticipants
+                    SELECT id, maxParticipants, status, registrationMode
                     FROM \`event\`
                     WHERE id = ${eventId}
                     FOR UPDATE
@@ -150,6 +155,9 @@ export async function createRegistration(
                 }
 
                 const lockedEvent = lockedEvents[0];
+                if (lockedEvent.status !== "APPROVED") {
+                    throw new Error("EVENT_NOT_APPROVED");
+                }
 
                 /*
                  * 2. Check for an existing registration again
@@ -175,7 +183,7 @@ export async function createRegistration(
                  * immediately, so check capacity while
                  * holding the event lock.
                  */
-                if (event.registrationMode === "OPEN") {
+                if (lockedEvent.registrationMode === "OPEN") {
 
                     if (lockedEvent.maxParticipants !== null) {
 
@@ -251,6 +259,11 @@ export async function createRegistration(
     } catch (error) {
 
         if (error instanceof Error) {
+            if (error.message === "EVENT_NOT_APPROVED") {
+                return res.status(400).json({
+                    message: "Event is not approved"
+                });
+            }
 
             if (error.message === "EVENT_NOT_FOUND") {
                 return res.status(404).json({
@@ -311,10 +324,14 @@ export async function approveRegistration(req: Request, res: Response) {
             }
 
             // 3. Lock the event row.
-            const lockedEvents = await tx.$queryRaw<
-                { id: string; maxParticipants: number | null }[]
+           const lockedEvents = await tx.$queryRaw<
+                {
+                    id: string;
+                    maxParticipants: number | null;
+                    status: string;
+                }[]
             >`
-                SELECT id, maxParticipants
+                SELECT id, maxParticipants, status
                 FROM \`event\`
                 WHERE id = ${registration.eventId}
                 FOR UPDATE
@@ -325,6 +342,9 @@ export async function approveRegistration(req: Request, res: Response) {
             }
 
             const event = lockedEvents[0];
+            if (event.status !== "APPROVED") {
+                throw new Error("EVENT_NOT_APPROVED");
+            }
 
             // 4. Recheck registration status after acquiring the lock.
             const currentRegistration = await tx.registration.findUnique({
@@ -392,6 +412,12 @@ export async function approveRegistration(req: Request, res: Response) {
                 });
             }
 
+            if (error.message === "EVENT_NOT_APPROVED") {
+                return res.status(400).json({
+                    message: "Registrations can only be approved for approved events"
+                });
+            }
+
             if (error.message === "NOT_EVENT_ORGANIZER") {
                 return res.status(403).json({
                     message: "You are not the organizer of this event"
@@ -435,61 +461,101 @@ export async function rejectRegistration(req: Request, res: Response) {
             });
         }
 
-        const registration = await prisma.registration.findUnique({
-            where: {
-                id: registrationId
-            },
-            include: {
-                event: true
+        const result = await prisma.$transaction(async (tx) => {
+            // Find the registration and its event
+            const registration = await tx.registration.findUnique({
+                where: {
+                    id: registrationId
+                },
+                include: {
+                    event: true
+                }
+            });
+
+            if (!registration) {
+                throw new Error("REGISTRATION_NOT_FOUND");
             }
-        });
 
-        if (!registration) {
-            return res.status(404).json({
-                message: "Registration not found"
-            });
-        }
-
-        if (registration.event.organizerId !== userId) {
-            return res.status(403).json({
-                message: "You are not the organizer of this event"
-            });
-        }
-
-        if (registration.status !== "PENDING") {
-            return res.status(400).json({
-                message: "Only pending registrations can be rejected"
-            });
-        }
-
-        const updatedRegistration = await prisma.registration.update({
-            where: {
-                id: registrationId
-            },
-            data: {
-                status: "REJECTED"
+            // Verify that the requester owns the event
+            if (registration.event.organizerId !== userId) {
+                throw new Error("NOT_EVENT_ORGANIZER");
             }
+
+            // Lock the event row to coordinate status changes
+            await tx.$queryRaw`
+                SELECT id FROM event
+                WHERE id = ${registration.eventId}
+                FOR UPDATE
+            `;
+
+            // Atomically transition only a PENDING registration
+            const updated = await tx.registration.updateMany({
+                where: {
+                    id: registrationId,
+                    status: "PENDING"
+                },
+                data: {
+                    status: "REJECTED"
+                }
+            });
+
+            if (updated.count === 0) {
+                throw new Error("REGISTRATION_NOT_PENDING");
+            }
+
+            return await tx.registration.findUnique({
+                where: {
+                    id: registrationId
+                }
+            });
         });
 
         return res.status(200).json({
             message: "Registration rejected successfully",
-            registration: updatedRegistration
+            registration: result
         });
+
     } catch (error) {
+        if (error instanceof Error) {
+            if (error.message === "REGISTRATION_NOT_FOUND") {
+                return res.status(404).json({
+                    message: "Registration not found"
+                });
+            }
+
+            if (error.message === "NOT_EVENT_ORGANIZER") {
+                return res.status(403).json({
+                    message: "You are not the organizer of this event"
+                });
+            }
+
+            if (error.message === "REGISTRATION_NOT_PENDING") {
+                return res.status(400).json({
+                    message: "Only pending registrations can be rejected"
+                });
+            }
+        }
+
         console.error(error);
 
         return res.status(500).json({
             message: "Internal server error"
         });
     }
-    }
+}
 export async function getMyRegistrations(req: Request, res: Response) {
     try {
         const userId = req.user.id;
 
-       const registrations = await prisma.registration.findMany({
+        const registrations = await prisma.registration.findMany({
             where: {
-                userId
+                userId,
+                event: {
+                    OR: [
+                        { type: "PUBLIC" },
+                        { organizerId: userId }
+                    ]
+                }
             },
             include: {
                 event: true,
@@ -508,6 +574,7 @@ export async function getMyRegistrations(req: Request, res: Response) {
                 createdAt: "desc"
             }
         });
+
         return res.status(200).json({
             message: "Registrations fetched successfully",
             registrations
@@ -525,8 +592,9 @@ export async function getEventRegistrations(req: Request, res: Response) {
     try {
         const { eventId } = req.params as { eventId: string };
         const userId = req.user.id;
+        const userRole = req.user.role;
 
-        if (!eventId) {
+        if (!eventId|| eventId.trim() === "") {
             return res.status(400).json({
                 message: "Event ID is required"
             });
@@ -545,9 +613,12 @@ export async function getEventRegistrations(req: Request, res: Response) {
         }
 
         // Only the event organizer can view registrations
-        if (event.organizerId !== userId) {
+       if (
+            event.organizerId !== userId &&
+            userRole !== "ADMIN"
+        ) {
             return res.status(403).json({
-                message: "You are not the organizer of this event"
+                message: "Only the event organizer or an admin can view registrations"
             });
         }
 
@@ -556,7 +627,13 @@ export async function getEventRegistrations(req: Request, res: Response) {
                 eventId
             },
             include: {
-                user: true
+                 user: {
+            select: {
+                id: true,
+                name: true,
+                email: true
+            }
+        }
             },
             orderBy: {
                 createdAt: "desc"
@@ -713,55 +790,122 @@ export async function updateRegistration(
             }
         }
 
-        // 10. Update existing answers or create new ones
-        const updatedRegistration =
-            await prisma.$transaction(async (tx) => {
-                for (const answer of answers) {
-                    await tx.registrationAnswer.upsert({
-                        where: {
-                            registrationId_fieldId: {
-                                registrationId,
-                                fieldId: answer.fieldId
-                            }
-                        },
-                        update: {
-                            value: answer.value
-                        },
-                        create: {
-                            registrationId,
-                            fieldId: answer.fieldId,
-                            value: answer.value
-                        }
-                    });
+        
+        // 10. Update answers atomically after rechecking registration status
+const updatedRegistration = await prisma.$transaction(async (tx) => {
+
+    // Lock the event row first.
+    // This coordinates with cancellation and other registration operations
+    // that use the same event-row locking convention.
+    const lockedEvents = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id
+    FROM \`event\`
+    WHERE id = ${registration.eventId}
+    FOR UPDATE
+`;
+
+if (lockedEvents.length === 0) {
+    throw new Error("EVENT_NOT_FOUND");
+}
+
+    // Lock and re-read the registration after acquiring the event lock.
+    const currentRegistration = await tx.$queryRaw<
+        Array<{
+            id: string;
+            userId: string;
+            status: string;
+        }>
+    >`
+        SELECT id, userId, status
+        FROM registration
+        WHERE id = ${registrationId}
+        FOR UPDATE
+    `;
+
+    if (currentRegistration.length === 0) {
+        throw new Error("REGISTRATION_NOT_FOUND");
+    }
+
+    const current = currentRegistration[0];
+
+    // Recheck ownership inside the transaction.
+    if (current.userId !== userId) {
+        throw new Error("NOT_REGISTRATION_OWNER");
+    }
+
+    // Recheck status inside the transaction.
+    if (
+        current.status === "REJECTED" ||
+        current.status === "CANCELLED"
+    ) {
+        throw new Error("REGISTRATION_NOT_UPDATABLE");
+    }
+
+    // Update existing answers or create new ones.
+    for (const answer of answers) {
+        await tx.registrationAnswer.upsert({
+            where: {
+                registrationId_fieldId: {
+                    registrationId,
+                    fieldId: answer.fieldId
                 }
+            },
+            update: {
+                value: answer.value
+            },
+            create: {
+                registrationId,
+                fieldId: answer.fieldId,
+                value: answer.value
+            }
+        });
+    }
 
-                return tx.registration.findUnique({
-                    where: {
-                        id: registrationId
-                    },
-                    include: {
-                        event: true,
-                        answers: {
-                            include: {
-                                field: true
-                            }
-                        }
-                    }
-                });
-            });
-
+    return tx.registration.findUnique({
+        where: {
+            id: registrationId
+        },
+        include: {
+            event: true,
+            answers: {
+                include: {
+                    field: true
+                }
+            }
+        }
+    });
+});
         return res.status(200).json({
             message: "Registration updated successfully",
             registration: updatedRegistration
         });
+} catch (error) {
+    if (error instanceof Error) {
+        if (error.message === "REGISTRATION_NOT_FOUND") {
+            return res.status(404).json({
+                message: "Registration not found"
+            });
+        }
 
-    } catch (error) {
-        console.error(error);
+        if (error.message === "NOT_REGISTRATION_OWNER") {
+            return res.status(403).json({
+                message: "You cannot update another user's registration"
+            });
+        }
 
-        return res.status(500).json({
-            message: "Internal server error"
-        });
+        if (error.message === "REGISTRATION_NOT_UPDATABLE") {
+            return res.status(400).json({
+                message: "This registration cannot be updated"
+            });
+        }
     }
+
+    console.error(error);
+
+    return res.status(500).json({
+        message: "Internal server error"
+    });
+}
 }
 
 export async function cancelRegistration(
@@ -802,12 +946,16 @@ export async function cancelRegistration(
                 }
 
                 // 3. Lock the event row.
-                await tx.$queryRaw<{ id: string }[]>`
+                const lockedEvents = await tx.$queryRaw<{ id: string }[]>`
                     SELECT id
                     FROM \`event\`
                     WHERE id = ${registration.eventId}
                     FOR UPDATE
                 `;
+
+                if (lockedEvents.length === 0) {
+                    throw new Error("EVENT_NOT_FOUND");
+                }
 
                 // 4. Re-read the registration after acquiring
                 // the event lock.

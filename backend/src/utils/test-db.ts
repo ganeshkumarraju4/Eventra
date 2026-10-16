@@ -29,15 +29,19 @@ const events = await prisma.event.findMany({
   },
 });
 
+
 const bookings = await prisma.booking.findMany({
-  select: {
-    id: true,
-    eventId: true,
-    venueId: true,
-    userId: true,
-    status: true,
-  },
+    select: {
+        id: true,
+        eventId: true,
+        venueId: true,
+        startTime: true,
+        endTime: true,
+        createdAt: true,
+        updatedAt: true,
+    },
 });
+
 
 const registrations = await prisma.registration.findMany({
   select: {

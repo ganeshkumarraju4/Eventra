@@ -24,11 +24,7 @@ export async function createRegistrationField(
             });
         }
 
-        if (!label || !fieldType) {
-            return res.status(400).json({
-                message: "Label and field type are required"
-            });
-        }
+        
 
         // Check whether the field type is valid
         if (!Object.values(FieldType).includes(fieldType)) {
@@ -85,41 +81,65 @@ export async function createRegistrationField(
             });
         }
 
-        const lastField = await prisma.registrationField.findFirst({
-            where: {
-                eventId
-            },
-            orderBy: {
-                order: "desc"
-            }
-        });
+        const field = await prisma.$transaction(async (tx) => {
+    // Lock the event row to serialize field creation for this event.
+    const lockedEvents = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id
+        FROM \`event\`
+        WHERE id = ${eventId}
+        FOR UPDATE
+    `;
 
-        const order = lastField ? lastField.order + 1 : 1;
+    if (lockedEvents.length === 0) {
+        throw new Error("EVENT_NOT_FOUND");
+    }
 
-        const field = await prisma.registrationField.create({
-            data: {
-                eventId,
-                label,
-                fieldType,
-                required: required ?? false,
-                placeholder,
-                options,
-                order
-            }
-        });
+    // Recalculate the order while holding the lock.
+    const lastField = await tx.registrationField.findFirst({
+        where: {
+            eventId
+        },
+        orderBy: {
+            order: "desc"
+        }
+    });
 
-        return res.status(201).json({
-            message: "Registration field created successfully",
-            field
-        });
+    const order = lastField ? lastField.order + 1 : 1;
 
-    } catch (error) {
-        console.error(error);
-
-        return res.status(500).json({
-            message: "Internal server error"
+    // Create the field within the same transaction.
+    return tx.registrationField.create({
+        data: {
+            eventId,
+            label: label.trim(),
+            fieldType,
+            required: required ?? false,
+            placeholder,
+            options,
+            order
+        }
+    });
+    
+});
+return res.status(201).json({
+    message: "Registration field created successfully",
+    field
+});
+} catch (error) {
+    if (
+        error instanceof Error &&
+        error.message === "EVENT_NOT_FOUND"
+    ) {
+        return res.status(404).json({
+            message: "Event not found"
         });
     }
+
+    console.error(error);
+
+    return res.status(500).json({
+        message: "Internal server error"
+    });
+}
 }
 export async function getRegistrationFields(
     req: Request,
@@ -127,8 +147,9 @@ export async function getRegistrationFields(
 ) {
     try {
         const eventId = String(req.params.eventId);
+        const userId = req.user.id;
 
-        if (!eventId) {
+        if (!eventId || eventId === "undefined") {
             return res.status(400).json({
                 message: "Event ID is required"
             });
@@ -143,6 +164,19 @@ export async function getRegistrationFields(
         if (!event) {
             return res.status(404).json({
                 message: "Event not found"
+            });
+        }
+        const userRole = req.user.role;
+
+
+        // Private-event registration fields are visible only to the organizer.
+        if (
+            event.type === "PRIVATE" &&
+            event.organizerId !== userId &&
+            userRole !== "ADMIN"
+        ) {
+            return res.status(403).json({
+                message: "You are not allowed to view these registration fields"
             });
         }
 
@@ -184,6 +218,46 @@ export async function updateRegistrationField(
             options,
             order
         } = req.body;
+        // Validate label
+if (
+    label !== undefined &&
+    (typeof label !== "string" || label.trim().length === 0)
+) {
+    return res.status(400).json({
+        message: "Label must be a non-empty string"
+    });
+}
+
+// Validate required
+if (
+    required !== undefined &&
+    typeof required !== "boolean"
+) {
+    return res.status(400).json({
+        message: "Required must be a boolean"
+    });
+}
+
+// Validate placeholder
+if (
+    placeholder !== undefined &&
+    placeholder !== null &&
+    typeof placeholder !== "string"
+) {
+    return res.status(400).json({
+        message: "Placeholder must be a string or null"
+    });
+}
+
+// Validate order
+if (
+    order !== undefined &&
+    (!Number.isInteger(order) || order < 0)
+) {
+    return res.status(400).json({
+        message: "Order must be a non-negative integer"
+    });
+}
 
         const { event, error } = await getOrganizerEvent(
             eventId,
@@ -226,57 +300,118 @@ export async function updateRegistrationField(
             });
         }
 
-        const answerCount = await prisma.registrationAnswer.count({
+        const updatedField = await prisma.$transaction(async (tx) => {
+  
+    // 1. Lock the event row first
+const lockedEvents = await tx.$queryRaw<
+    { id: string; organizerId: string; status: string }[]
+>`
+    SELECT id, organizerId, status
+    FROM \`event\`
+    WHERE id = ${eventId}
+    FOR UPDATE
+`;
+
+const lockedEvent = lockedEvents[0];
+
+// Verify event still exists
+if (!lockedEvent) {
+    throw new Error("EVENT_NOT_FOUND");
+}
+
+// Recheck organizer ownership inside the transaction
+if (lockedEvent.organizerId !== userId) {
+    throw new Error("NOT_ORGANIZER");
+}
+
+// Prevent modification of rejected or cancelled events
+if (
+    lockedEvent.status === "REJECTED" ||
+    lockedEvent.status === "CANCELLED"
+) {
+    throw new Error("EVENT_NOT_MODIFIABLE");
+}
+
+    // 2. Lock the registration-field row
+    const lockedFields = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id
+        FROM \`RegistrationField\`
+        WHERE id = ${fieldId}
+          AND eventId = ${eventId}
+        FOR UPDATE
+    `;
+
+    if (lockedFields.length === 0) {
+        throw new Error("REGISTRATION_FIELD_NOT_FOUND");
+    }
+
+    // 3. Check whether participants have already answered
+    if (options !== undefined) {
+        const answerCount = await tx.registrationAnswer.count({
             where: {
                 fieldId
             }
         });
 
-        if (options !== undefined && answerCount > 0) {
-            return res.status(400).json({
-                message: "Cannot change options after users have answered this field"
-            });
+        if (answerCount > 0) {
+            throw new Error("FIELD_ALREADY_ANSWERED");
         }
+    }
 
-        if (
-            options !== undefined &&
-            options !== null &&
-            !Array.isArray(options)
-        ) {
-            return res.status(400).json({
-                message: "Options must be an array"
-            });
+    // 4. Update the field inside the transaction
+    return tx.registrationField.update({
+        where: {
+            id: fieldId
+        },
+        data: {
+            ...(label !== undefined && { label: label.trim() }),
+            ...(required !== undefined && { required }),
+            ...(placeholder !== undefined && { placeholder }),
+            ...(options !== undefined && { options }),
+            ...(order !== undefined && { order })
         }
+    });
+});
 
-        if (
-            field.fieldType !== "SELECT" &&
-            field.fieldType !== "CHECKBOX" &&
-            options !== undefined
-        ) {
-            return res.status(400).json({
-                message: "Options are only allowed for SELECT and CHECKBOX fields"
-            });
-        }
+return res.status(200).json({
+    message: "Registration field updated successfully",
+    field: updatedField
+});
 
-        const updatedField = await prisma.registrationField.update({
-            where: {
-                id: fieldId
-            },
-            data: {
-                ...(label !== undefined && { label }),
-                ...(required !== undefined && { required }),
-                ...(placeholder !== undefined && { placeholder }),
-                ...(options !== undefined && { options }),
-                ...(order !== undefined && { order })
+       } catch (error) {
+        if (error instanceof Error) {
+            if (error.message === "REGISTRATION_FIELD_NOT_FOUND") {
+                return res.status(404).json({
+                    message: "Registration field not found"
+                });
             }
+            if (error instanceof Error) {
+    if (error.message === "EVENT_NOT_FOUND") {
+        return res.status(404).json({
+            message: "Event not found"
         });
+    }
 
-        return res.status(200).json({
-            message: "Registration field updated successfully",
-            field: updatedField
+    if (error.message === "NOT_ORGANIZER") {
+        return res.status(403).json({
+            message: "You are not the organizer of this event"
         });
+    }
 
-    } catch (error) {
+    if (error.message === "EVENT_NOT_MODIFIABLE") {
+        return res.status(400).json({
+            message: "Cannot modify registration fields of a rejected or cancelled event"
+        });
+    }
+}
+
+            if (error.message === "FIELD_ALREADY_ANSWERED") {
+                return res.status(400).json({
+                    message: "Cannot change options after users have answered this field"
+                });
+            }
+        }
+
         console.error(error);
 
         return res.status(500).json({
@@ -284,6 +419,7 @@ export async function updateRegistrationField(
         });
     }
 }
+
 export async function deleteRegistrationField(
   req: Request,
   res: Response

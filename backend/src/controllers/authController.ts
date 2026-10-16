@@ -64,41 +64,66 @@ export async function register(req: Request, res: Response) {
     }
 }
 
+
 export async function login(req: Request, res: Response) {
-    try{
-        const {email , password} = req.body;
+    try {
+        const { email, password } = req.body ?? {};
+
+        // 1. Validate input.
+        if (
+            typeof email !== "string" ||
+            email.trim().length === 0 ||
+            typeof password !== "string" ||
+            password.length === 0
+        ) {
+            return res.status(400).json({
+                message: "Email and password are required"
+            });
+        }
+
+        // 2. Find the user.
         const user = await prisma.user.findUnique({
-            where:{
-                email:email,
-            },
+            where: {
+                email: email.trim()
+            }
         });
-        if(!user){
-            return res.status(401).json({
-                message: "User doesn't exist"
-            });
-        }
-        
-        const isPasswordValid = await comparePassword(password, user.password);
 
-        if(!isPasswordValid){
+        // 3. Use the same response for both authentication failures.
+        if (!user) {
             return res.status(401).json({
-                message:"Invalid password"
+                message: "Invalid email or password"
             });
         }
 
-          const token = generateToken(user.id, user.role);
+        const isPasswordValid = await comparePassword(
+            password,
+            user.password
+        );
 
+        if (!isPasswordValid) {
+            return res.status(401).json({
+                message: "Invalid email or password"
+            });
+        }
+
+        // 4. Generate the JWT.
+        const token = generateToken(user.id, user.role);
+
+        // 5. Return only safe user properties.
         return res.status(200).json({
             message: "User logged in successfully",
-            token: token,
+            token,
             user: {
+                id: user.id,
+                name: user.name,
                 email: user.email,
-            },
+                role: user.role
+            }
         });
 
-    }
-    catch(error){
+    } catch (error) {
         console.error("Login error:", error);
+
         return res.status(500).json({
             message: "Internal server error"
         });

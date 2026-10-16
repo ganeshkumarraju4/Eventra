@@ -5,9 +5,10 @@ const JWT_SECRET: string | undefined = process.env.JWT_SECRET;
 
 
 export function generateToken(userId: string, role: string) {
-     if (!JWT_SECRET) {
+    if (!JWT_SECRET) {
         throw new Error("JWT_SECRET is not defined");
     }
+
     return jwt.sign(
         {
             userId,
@@ -15,6 +16,7 @@ export function generateToken(userId: string, role: string) {
         },
         JWT_SECRET,
         {
+            algorithm: "HS256",
             expiresIn: "1h",
         }
     );
