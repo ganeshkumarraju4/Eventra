@@ -6,7 +6,8 @@ import {
     getApprovedEvents,
     getEvent,
     updateEvent,
-    cancelEvent
+    cancelEvent,
+    getMyEvents
 } from "../controllers/eventController";
 import {
     createEventChangeRequest, getMyEventChangeRequests
@@ -22,7 +23,7 @@ import { adminMiddleware } from "../middleware/adminMiddleware";
 const router = Router();
 
 router.post("/", authMiddleware, createEvent);
-
+router.get("/my", authMiddleware, getMyEvents);
 router.get(
     "/:eventId",
     authMiddleware,

@@ -365,6 +365,41 @@ export async function getEvent(req: Request, res: Response) {
 }
 
 
+export async function getMyEvents(req: Request, res: Response) {
+  try {
+    const userId = req.user!.id;
+
+    const events = await prisma.event.findMany({
+      where: {
+        organizerId: userId,
+      },
+      include: {
+        booking: {
+          include: {
+            venue: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return res.status(200).json({
+      message: "Your events fetched successfully",
+      events,
+    });
+  } catch (error) {
+    console.error("Get my events error:", error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+}
+
+
+
 export async function updateEvent(req: Request, res: Response) {
     try {
         const eventId = String(req.params.eventId);
