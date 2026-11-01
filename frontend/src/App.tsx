@@ -11,6 +11,7 @@ import MyRegistrations from "./pages/MyRegistrations";
 import EventRegistrations from "./pages/EventRegistrations";
 import MyEvents from "./pages/MyEvents";
 import AdminDashboard from "./pages/AdminDashboard";
+import ManageRegistrationFields from "./pages/ManageRegistrationFields";
 function App() {
   return (
     <BrowserRouter>
@@ -27,6 +28,10 @@ function App() {
       <Route path="/events/:eventId/registrations" element={<EventRegistrations />} />
       <Route path="/my-events" element={<MyEvents />} />
       <Route path="/admin" element={<AdminDashboard />} />
+      <Route
+  path="/events/:eventId/registration-fields"
+  element={<ManageRegistrationFields />}
+/>
       </Routes>
       
     </BrowserRouter>
