@@ -18,6 +18,7 @@ import {
 import api from "../api/axios";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import EventImage from "../components/EventImage";
 
 interface Venue {
   id: string;
@@ -398,15 +399,12 @@ export default function MyEvents() {
               return (
                 <article
                   key={event.id}
-                  className="rounded-3xl border border-black/[0.08] bg-white p-6 sm:p-7 shadow-sm transition hover:shadow-md flex flex-col justify-between"
+                  className="flex flex-col justify-between overflow-hidden rounded-3xl border border-black/[0.08] bg-white shadow-sm transition hover:shadow-md"
                 >
+                  <EventImage category={event.category} className="h-36 sm:h-40" />
+                  <div className="flex flex-1 flex-col justify-between p-6 sm:p-7">
                   <div>
-                    {/* Status & Category */}
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="rounded-full bg-[#E85D3F]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
-                        {event.category.replace(/_/g, " ")}
-                      </span>
-
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       <span
                         className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
                           statusBadgeStyles[event.status] ??
@@ -550,6 +548,7 @@ export default function MyEvents() {
                         {cancellingEventId === event.id ? "Cancelling..." : "Cancel Event"}
                       </button>
                     )}
+                  </div>
                   </div>
                 </article>
               );

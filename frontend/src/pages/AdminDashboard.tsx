@@ -19,6 +19,7 @@ import {
 import api from "../api/axios";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import EventImage from "../components/EventImage";
 
 interface EventItem {
   id: string;
@@ -538,8 +539,13 @@ export default function AdminDashboard() {
                 {filteredEvents.map((event) => (
                   <article
                     key={event.id}
-                    className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm transition hover:shadow-md flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6"
+                    className="flex flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-sm transition hover:shadow-md lg:flex-row"
                   >
+                    <EventImage
+                      category={event.category}
+                      className="h-32 w-full lg:h-auto lg:min-h-[180px] lg:w-48"
+                    />
+                    <div className="flex flex-1 flex-col gap-6 p-6 lg:flex-row lg:items-center lg:justify-between">
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2.5">
                         <span className="rounded-full bg-[#E85D3F]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
@@ -604,6 +610,7 @@ export default function AdminDashboard() {
                           </button>
                         </>
                       )}
+                    </div>
                     </div>
                   </article>
                 ))}

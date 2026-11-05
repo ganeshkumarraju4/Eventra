@@ -14,6 +14,7 @@ import {
 import api from "../api/axios";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import EventImage from "../components/EventImage";
 
 type EventCategory =
   | "ALL"
@@ -290,19 +291,16 @@ export default function Events() {
             {filteredEvents.map((event) => (
               <article
                 key={event.id}
-                className="group flex flex-col justify-between rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
               >
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="rounded-full bg-[#E85D3F]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
-                      {event.category}
-                    </span>
+                <EventImage category={event.category} className="h-36">
+                  <span className="rounded-full border border-white/25 bg-black/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-sm">
+                    {event.type}
+                  </span>
+                </EventImage>
 
-                    <span className="rounded-full border border-black/10 bg-[#FAF7F2] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#77736E]">
-                      {event.type}
-                    </span>
-                  </div>
-
+                <div className="flex flex-1 flex-col justify-between p-5">
+                  <div>
                   <h2 className="mt-4 text-xl font-bold leading-snug text-[#20201F] group-hover:text-[#E85D3F] transition">
                     <Link to={`/events/${event.id}`}>{event.title}</Link>
                   </h2>
@@ -310,7 +308,7 @@ export default function Events() {
                   <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-[#77736E]">
                     {event.description}
                   </p>
-                </div>
+                  </div>
 
                 <div className="mt-6 border-t border-black/10 pt-4">
                   <div className="space-y-2 text-xs text-[#77736E] mb-5">
@@ -368,6 +366,7 @@ export default function Events() {
                     View Details
                     <ArrowRight size={14} />
                   </Link>
+                </div>
                 </div>
               </article>
             ))}

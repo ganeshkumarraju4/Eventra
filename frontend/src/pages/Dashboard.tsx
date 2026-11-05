@@ -15,6 +15,7 @@ import {
 import api from "../api/axios";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import EventImage from "../components/EventImage";
 import { useAuth } from "../context/AuthContext";
 
 interface User {
@@ -374,24 +375,21 @@ export default function Dashboard() {
                   {events.slice(0, 6).map((event) => (
                     <article
                       key={event.id}
-                      className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+                      className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-md"
                     >
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="rounded-full bg-[#E85D3F]/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#C64A30]">
-                            {event.category || "Event"}
+                      <EventImage category={event.category} className="h-32">
+                        {event.startTime && (
+                          <span className="flex items-center gap-1 text-xs font-medium text-white drop-shadow">
+                            <Clock3 size={13} />
+                            {new Date(event.startTime).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </span>
-
-                          {event.startTime && (
-                            <span className="flex items-center gap-1 text-xs text-[#77736E]">
-                              <Clock3 size={13} />
-                              {new Date(event.startTime).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          )}
-                        </div>
+                        )}
+                      </EventImage>
+                      <div className="flex flex-1 flex-col justify-between p-5">
+                        <div>
 
                         <h3 className="mt-4 text-lg font-bold leading-snug text-[#20201F] group-hover:text-[#E85D3F] transition">
                           {event.title}
@@ -437,6 +435,7 @@ export default function Dashboard() {
                           View Details
                           <ArrowRight size={14} />
                         </Link>
+                      </div>
                       </div>
                     </article>
                   ))}

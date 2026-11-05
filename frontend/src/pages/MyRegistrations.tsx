@@ -14,6 +14,7 @@ import {
 import api from "../api/axios";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import EventImage from "../components/EventImage";
 
 interface EventItem {
   id: string;
@@ -234,16 +235,14 @@ export default function MyRegistrations() {
               return (
                 <article
                   key={registration.id}
-                  className="rounded-3xl border border-black/[0.08] bg-white p-6 sm:p-8 shadow-sm transition hover:shadow-md"
+                  className="overflow-hidden rounded-3xl border border-black/[0.08] bg-white shadow-sm transition hover:shadow-md"
                 >
+                  {event && (
+                    <EventImage category={event.category} className="h-36 sm:h-40" />
+                  )}
+                  <div className="p-6 sm:p-8">
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div>
-                      {event?.category && (
-                        <span className="rounded-full bg-[#E85D3F]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
-                          {event.category}
-                        </span>
-                      )}
-
                       <h2 className="mt-3 text-2xl font-bold text-[#20201F]">
                         {event?.title ?? "Event Details Unavailable"}
                       </h2>
@@ -345,6 +344,7 @@ export default function MyRegistrations() {
                         </button>
                       )}
                     </div>
+                  </div>
                   </div>
                 </article>
               );

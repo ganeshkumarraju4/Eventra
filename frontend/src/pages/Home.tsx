@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import EventImage from "../components/EventImage";
 import api from "../api/axios";
 
 interface EventItem {
@@ -292,33 +293,32 @@ export default function Home() {
               {events.map((event) => (
                 <article
                   key={event.id}
-                  className="group rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg flex flex-col justify-between"
+                  className="group overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg flex flex-col justify-between"
                 >
                   <div>
-                    <div className="flex items-center justify-between">
-                      <span className="rounded-full bg-[#E85D3F]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
-                        {event.category}
-                      </span>
-                      <span className="flex items-center gap-1 text-xs text-[#77736E]">
+                    <EventImage category={event.category} className="h-36">
+                      <span className="flex items-center gap-1 text-xs font-medium text-white drop-shadow">
                         <Clock3 size={14} />
                         {new Date(event.startTime).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </span>
+                    </EventImage>
+
+                    <div className="p-5">
+                      <h3 className="text-xl font-bold tracking-tight text-[#20201F] transition group-hover:text-[#E85D3F]">
+                        <Link to={`/events/${event.id}`}>{event.title}</Link>
+                      </h3>
+
+                      <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#77736E]">
+                        {event.description}
+                      </p>
                     </div>
-
-                    <h3 className="mt-4 text-xl font-bold tracking-tight text-[#20201F] group-hover:text-[#E85D3F] transition">
-                      <Link to={`/events/${event.id}`}>{event.title}</Link>
-                    </h3>
-
-                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#77736E]">
-                      {event.description}
-                    </p>
                   </div>
 
-                  <div className="mt-6 border-t border-black/10 pt-4">
-                    <div className="flex items-center justify-between text-xs text-[#77736E]">
+                  <div className="mx-5 border-t border-black/10 pb-5 pt-4">
+                    <div className="flex items-center justify-between gap-3 text-xs text-[#77736E]">
                       <span className="flex items-center gap-1 font-semibold text-[#20201F]">
                         <CalendarDays size={14} className="text-[#E85D3F]" />
                         {new Date(event.startTime).toLocaleDateString(undefined, {
