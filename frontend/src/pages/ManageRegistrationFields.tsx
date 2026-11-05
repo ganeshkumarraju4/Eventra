@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Plus,
@@ -7,11 +7,11 @@ import {
   Trash2,
   ClipboardList,
   X,
-  Save,
-  RefreshCw,
+  CheckCircle2,
 } from "lucide-react";
-
 import api from "../api/axios";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
 
 type FieldType =
   | "TEXT"
@@ -43,15 +43,15 @@ interface FieldForm {
 }
 
 const fieldTypes: { value: FieldType; label: string }[] = [
-  { value: "TEXT", label: "Text" },
+  { value: "TEXT", label: "Short Text" },
   { value: "NUMBER", label: "Number" },
-  { value: "EMAIL", label: "Email" },
-  { value: "PHONE", label: "Phone" },
-  { value: "URL", label: "URL" },
+  { value: "EMAIL", label: "Email Address" },
+  { value: "PHONE", label: "Phone Number" },
+  { value: "URL", label: "Website / URL" },
   { value: "DATE", label: "Date" },
-  { value: "SELECT", label: "Dropdown" },
-  { value: "CHECKBOX", label: "Checkbox" },
-  { value: "TEXTAREA", label: "Long Text" },
+  { value: "SELECT", label: "Dropdown Select" },
+  { value: "CHECKBOX", label: "Multi Checkbox" },
+  { value: "TEXTAREA", label: "Long Text / Notes" },
 ];
 
 const initialForm: FieldForm = {
@@ -63,7 +63,7 @@ const initialForm: FieldForm = {
 };
 
 const inputClass =
-  "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
+  "mt-1.5 w-full rounded-xl border border-black/15 bg-white px-4 py-3 text-sm text-[#20201F] outline-none transition placeholder:text-[#9C968F] focus:border-[#E85D3F] focus:ring-4 focus:ring-[#E85D3F]/10";
 
 export default function ManageRegistrationFields() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -75,8 +75,7 @@ export default function ManageRegistrationFields() {
   const [success, setSuccess] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingField, setEditingField] =
-    useState<RegistrationField | null>(null);
+  const [editingField, setEditingField] = useState<RegistrationField | null>(null);
 
   const [form, setForm] = useState<FieldForm>(initialForm);
   const [saving, setSaving] = useState(false);
@@ -84,96 +83,40 @@ export default function ManageRegistrationFields() {
   const needsOptions =
     form.fieldType === "SELECT" || form.fieldType === "CHECKBOX";
 
-  // Fetch existing registration fields
- const loadFields = useCallback(async () => {
-  if (!eventId) return;
+  const loadFields = useCallback(async () => {
+    if (!eventId) return;
 
-  try {
-    const response = await api.get(
-      `/events/${eventId}/registration-fields`
-    );
-
-    setFields(response.data.fields ?? []);
-    setError("");
-
-  } catch (err: unknown) {
-    const error = err as {
-      response?: {
-        status?: number;
-        data?: { message?: string };
-      };
-    };
-
-    if (
-      error.response?.status === 401 ||
-      error.response?.status === 403
-    ) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    setError(
-      error.response?.data?.message ||
-        "Unable to load registration fields."
-    );
-
-  } finally {
-    setLoading(false);
-  }
-}, [eventId, navigate]);
-
-  useEffect(() => {
-  let active = true;
-
-  if (!eventId) {
-    return;
-  }
-
-  api
-    .get(`/events/${eventId}/registration-fields`)
-    .then((response) => {
-      if (active) {
-        setFields(response.data.fields ?? []);
-      }
-    })
-    .catch((err: unknown) => {
-      if (!active) return;
-
-      const error = err as {
-        response?: {
-          status?: number;
-          data?: { message?: string };
-        };
+    try {
+      const response = await api.get(`/events/${eventId}/registration-fields`);
+      setFields(response.data.fields ?? []);
+      setError("");
+    } catch (err: unknown) {
+      const axiosError = err as {
+        response?: { status?: number; data?: { message?: string } };
       };
 
-      if (error.response?.status === 401 ||
-          error.response?.status === 403) {
+      if (
+        axiosError.response?.status === 401 ||
+        axiosError.response?.status === 403
+      ) {
         localStorage.removeItem("token");
-        localStorage.removeItem("user");
         navigate("/login", { replace: true });
         return;
       }
 
       setError(
-        error.response?.data?.message ||
+        axiosError.response?.data?.message ||
           "Unable to load registration fields."
       );
-    })
-    .finally(() => {
-      if (active) {
-        setLoading(false);
-      }
-    });
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId, navigate]);
 
-  return () => {
-    active = false;
-  };
-}, [eventId, navigate]);
+  useEffect(() => {
+    void loadFields();
+  }, [loadFields]);
 
-  // Open modal for creating a field
   function openCreateModal() {
     setEditingField(null);
     setForm(initialForm);
@@ -181,10 +124,8 @@ export default function ManageRegistrationFields() {
     setModalOpen(true);
   }
 
-  // Open modal for editing a field
   function openEditModal(field: RegistrationField) {
     setEditingField(field);
-
     setForm({
       label: field.label,
       fieldType: field.fieldType,
@@ -192,28 +133,23 @@ export default function ManageRegistrationFields() {
       placeholder: field.placeholder ?? "",
       options: field.options?.join("\n") ?? "",
     });
-
     setError("");
     setModalOpen(true);
   }
 
   function closeModal() {
     if (saving) return;
-
     setModalOpen(false);
     setEditingField(null);
     setForm(initialForm);
   }
 
-  // Handle form submission
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-
     setError("");
     setSuccess("");
 
     const label = form.label.trim();
-
     if (!label) {
       setError("Please enter a question label.");
       return;
@@ -225,7 +161,7 @@ export default function ManageRegistrationFields() {
       .filter(Boolean);
 
     if (needsOptions && options.length === 0) {
-      setError("Please provide at least one option.");
+      setError("Please provide at least one option (one per line).");
       return;
     }
 
@@ -244,17 +180,12 @@ export default function ManageRegistrationFields() {
           `/events/${eventId}/registration-fields/${editingField.id}`,
           payload
         );
-
         setSuccess("Registration field updated successfully.");
       } else {
-        await api.post(
-          `/events/${eventId}/registration-fields`,
-          {
-            ...payload,
-            fieldType: form.fieldType,
-          }
-        );
-
+        await api.post(`/events/${eventId}/registration-fields`, {
+          ...payload,
+          fieldType: form.fieldType,
+        });
         setSuccess("Registration field created successfully.");
       }
 
@@ -264,436 +195,319 @@ export default function ManageRegistrationFields() {
 
       await loadFields();
     } catch (err: unknown) {
-      const error = err as {
-        response?: {
-          data?: { message?: string };
-        };
+      const axiosError = err as {
+        response?: { data?: { message?: string } };
       };
-
       setError(
-        error.response?.data?.message ||
-          "Unable to save registration field."
+        axiosError.response?.data?.message || "Unable to save registration field."
       );
     } finally {
       setSaving(false);
     }
   }
 
-  // Delete a registration field
   async function handleDelete(field: RegistrationField) {
     const confirmed = window.confirm(
-      `Are you sure you want to delete "${field.label}"?`
+      `Are you sure you want to delete the question "${field.label}"?`
     );
-
     if (!confirmed) return;
 
     setError("");
     setSuccess("");
 
     try {
-      await api.delete(
-        `/events/${eventId}/registration-fields/${field.id}`
-      );
-
-      setSuccess("Registration field deleted successfully.");
-
+      await api.delete(`/events/${eventId}/registration-fields/${field.id}`);
+      setSuccess("Field deleted successfully.");
       await loadFields();
     } catch (err: unknown) {
-      const error = err as {
-        response?: {
-          data?: { message?: string };
-        };
+      const axiosError = err as {
+        response?: { data?: { message?: string } };
       };
-
       setError(
-        error.response?.data?.message ||
-          "Unable to delete registration field."
+        axiosError.response?.data?.message || "Unable to delete field."
       );
     }
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-10">
-      <div className="mx-auto max-w-5xl">
+    <div className="min-h-screen bg-[#FAF7F2] text-[#20201F] flex flex-col justify-between">
+      <Navbar />
 
-        {/* Header */}
-        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+      <main className="flex-1 mx-auto w-full max-w-5xl px-5 py-8 sm:px-8 sm:py-12">
+        <Link
+          to="/my-events"
+          className="inline-flex items-center gap-2 text-sm font-bold text-[#77736E] transition hover:text-[#E85D3F] mb-6"
+        >
+          <ArrowLeft size={16} />
+          Back to My Events
+        </Link>
 
+        {/* Page Header */}
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between border-b border-black/10 pb-8">
           <div>
-            <button
-              onClick={() => navigate("/my-events")}
-              className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-indigo-600"
-            >
-              <ArrowLeft size={17} />
-              Back to My Events
-            </button>
-
-            <p className="text-sm font-semibold uppercase tracking-widest text-indigo-600">
-              Organizer Workspace
-            </p>
-
-            <h1 className="mt-2 text-3xl font-bold text-slate-900">
-              Registration Form Builder
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#E85D3F]/30 bg-[#E85D3F]/10 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-[#C64A30] mb-3">
+              <ClipboardList size={13} />
+              Form Builder
+            </div>
+            <h1 className="text-3xl font-black tracking-tight text-[#20201F] sm:text-4xl">
+              Registration Questions
             </h1>
-
-            <p className="mt-2 text-slate-500">
-              Create custom questions for people registering
-              for your event.
+            <p className="mt-2 text-sm text-[#77736E]">
+              Customize the information attendees must provide when reserving a spot.
             </p>
           </div>
 
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700"
-          >
-            <Plus size={18} />
-            Add Question
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#E85D3F] px-5 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-sm hover:bg-[#20201F] transition cursor-pointer"
+            >
+              <Plus size={16} />
+              Add Question
+            </button>
+          </div>
         </div>
 
-        {/* Success message */}
+        {/* Success / Error Alerts */}
         {success && (
-          <div
-            role="status"
-            className="mb-5 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700"
-          >
-            {success}
+          <div className="mt-6 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
+            <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
+            <span>{success}</span>
           </div>
         )}
 
-        {/* Error message */}
-        {error && (
-          <div
-            role="alert"
-            className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-          >
+        {error && !modalOpen && (
+          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {error}
           </div>
         )}
 
-        {/* Field count */}
-        {!loading && (
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
-            <p className="text-sm text-slate-500">
-              Total registration questions
-            </p>
-
-            <p className="mt-1 text-3xl font-bold text-slate-900">
-              {fields.length}
+        {/* Form Fields List */}
+        {loading ? (
+          <div className="flex min-h-[35vh] flex-col items-center justify-center">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#E85D3F]/20 border-t-[#E85D3F]" />
+            <p className="mt-4 text-sm font-semibold text-[#77736E]">
+              Loading custom questions...
             </p>
           </div>
-        )}
-
-        {/* Loading */}
-        {loading && (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white py-20">
-            <RefreshCw
-              size={32}
-              className="animate-spin text-indigo-600"
-            />
-
-            <p className="mt-4 text-slate-600">
-              Loading registration fields...
-            </p>
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!loading && !error && fields.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-
-            <ClipboardList
-              size={42}
-              className="mx-auto text-indigo-500"
-            />
-
-            <h2 className="mt-5 text-xl font-bold text-slate-900">
-              No registration questions yet
+        ) : fields.length === 0 ? (
+          <div className="mt-8 rounded-3xl border border-dashed border-black/15 bg-white p-14 text-center">
+            <ClipboardList size={42} className="mx-auto text-[#77736E]" />
+            <h2 className="mt-4 text-lg font-bold text-[#20201F]">
+              No custom questions yet
             </h2>
-
-            <p className="mt-2 text-slate-500">
-              Start building your registration form by adding
-              your first question.
+            <p className="mt-1 text-sm text-[#77736E] max-w-md mx-auto">
+              By default, attendees will register using their Eventra account name and email.
+              Add questions if you need dietary preferences, phone numbers, or job titles.
             </p>
-
             <button
               onClick={openCreateModal}
-              className="mt-6 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#E85D3F] px-6 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-sm hover:bg-[#20201F] transition cursor-pointer"
             >
+              <Plus size={16} />
               Add First Question
             </button>
           </div>
-        )}
-
-        {/* Registration fields */}
-        {!loading && fields.length > 0 && (
-          <div className="space-y-4">
-
+        ) : (
+          <div className="mt-8 space-y-4">
             {fields.map((field, index) => (
               <div
                 key={field.id}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md sm:p-6"
+                className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm transition hover:shadow-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
               >
-
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-
-                  <div className="flex gap-4">
-
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 font-bold text-indigo-600">
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#FAF7F2] text-[11px] font-bold text-[#77736E] border border-black/10">
                       {index + 1}
-                    </div>
+                    </span>
 
-                    <div>
-                      <h3 className="font-semibold text-slate-900">
-                        {field.label}
-                      </h3>
+                    <span className="rounded-full bg-[#E85D3F]/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#C64A30]">
+                      {field.fieldType}
+                    </span>
 
-                      <div className="mt-2 flex flex-wrap gap-2">
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        field.required
+                          ? "bg-red-50 text-red-700 border border-red-200"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {field.required ? "Required" : "Optional"}
+                    </span>
+                  </div>
 
-                        <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-                          {field.fieldType}
-                        </span>
+                  <h3 className="font-bold text-base text-[#20201F]">
+                    {field.label}
+                  </h3>
 
+                  {field.placeholder && (
+                    <p className="text-xs text-[#77736E] italic">
+                      Placeholder: "{field.placeholder}"
+                    </p>
+                  )}
+
+                  {field.options && field.options.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {field.options.map((opt) => (
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                            field.required
-                              ? "bg-red-50 text-red-600"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
+                          key={opt}
+                          className="rounded-lg bg-[#FAF7F2] border border-black/10 px-2 py-0.5 text-[11px] text-[#77736E]"
                         >
-                          {field.required ? "Required" : "Optional"}
+                          {opt}
                         </span>
-                      </div>
-
-                      {field.placeholder && (
-                        <p className="mt-2 text-sm text-slate-500">
-                          Placeholder: {field.placeholder}
-                        </p>
-                      )}
-
-                      {field.options && field.options.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {field.options.map((option, i) => (
-                            <span
-                              key={i}
-                              className="rounded-lg bg-slate-100 px-3 py-1 text-xs text-slate-600"
-                            >
-                              {option}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      ))}
                     </div>
-                  </div>
+                  )}
+                </div>
 
-                  <div className="flex gap-2 sm:shrink-0">
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  <button
+                    onClick={() => openEditModal(field)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-black/15 bg-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-[#20201F] hover:bg-[#FAF7F2] transition"
+                  >
+                    <Pencil size={13} />
+                    Edit
+                  </button>
 
-                    <button
-                      onClick={() => openEditModal(field)}
-                      className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                    >
-                      <Pencil size={15} />
-                      Edit
-                    </button>
-
-                    <button
-                      onClick={() => void handleDelete(field)}
-                      className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
-                    >
-                      <Trash2 size={15} />
-                      Delete
-                    </button>
-
-                  </div>
+                  <button
+                    onClick={() => void handleDelete(field)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-red-700 hover:bg-red-100 transition"
+                  >
+                    <Trash2 size={13} />
+                    Delete
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>
 
-      {/* Add/Edit Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-
-          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl sm:p-8">
-
-            <div className="mb-6 flex items-center justify-between">
-
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">
-                  {editingField ? "Edit Question" : "Add Question"}
+        {/* Modal: Create or Edit Question */}
+        {modalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+            <div className="my-8 w-full max-w-lg rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-black/10">
+              <div className="flex items-center justify-between pb-4 border-b border-black/10">
+                <h2 className="text-xl font-black text-[#20201F]">
+                  {editingField ? "Edit Question" : "Add Custom Question"}
                 </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Configure your registration question.
-                </p>
-              </div>
-
-              <button
-                onClick={closeModal}
-                disabled={saving}
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-
-              {/* Question label */}
-              <div>
-                <label className="text-sm font-semibold text-slate-700">
-                  Question Label *
-                </label>
-
-                <input
-                  type="text"
-                  value={form.label}
-                  onChange={(e) =>
-                    setForm({ ...form, label: e.target.value })
-                  }
-                  placeholder="e.g. College Name"
-                  className={inputClass}
-                  required
-                />
-              </div>
-
-              {/* Field type */}
-              <div>
-                <label className="text-sm font-semibold text-slate-700">
-                  Field Type *
-                </label>
-
-                <select
-                  value={form.fieldType}
-                  disabled={!!editingField}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      fieldType: e.target.value as FieldType,
-                      options: "",
-                    })
-                  }
-                  className={`${inputClass} disabled:cursor-not-allowed disabled:bg-slate-100`}
+                <button
+                  onClick={closeModal}
+                  className="rounded-full p-1.5 text-[#77736E] hover:bg-black/5"
                 >
-                  {fieldTypes.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-
-                {editingField && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Field type cannot be changed after creation.
-                  </p>
-                )}
+                  <X size={18} />
+                </button>
               </div>
 
-              {/* Placeholder */}
-              <div>
-                <label className="text-sm font-semibold text-slate-700">
-                  Placeholder
-                </label>
-
-                <input
-                  type="text"
-                  value={form.placeholder}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      placeholder: e.target.value,
-                    })
-                  }
-                  placeholder="Enter a helpful hint"
-                  className={inputClass}
-                />
-              </div>
-
-              {/* Options */}
-              {needsOptions && (
-                <div>
-                  <label className="text-sm font-semibold text-slate-700">
-                    Options *
-                  </label>
-
-                  <textarea
-                    rows={4}
-                    value={form.options}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        options: e.target.value,
-                      })
-                    }
-                    placeholder={"Option 1\nOption 2\nOption 3"}
-                    className={inputClass}
-                  />
-
-                  <p className="mt-1 text-xs text-slate-500">
-                    Enter one option per line.
-                  </p>
+              {error && (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700">
+                  {error}
                 </div>
               )}
 
-              {/* Required */}
-              <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-slate-50 p-4">
+              <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#20201F]">
+                    Question Label *
+                  </label>
+                  <input
+                    required
+                    value={form.label}
+                    onChange={(e) => setForm({ ...form, label: e.target.value })}
+                    placeholder="e.g. Dietary Restrictions or T-shirt Size"
+                    className={inputClass}
+                  />
+                </div>
 
-                <input
-                  type="checkbox"
-                  checked={form.required}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      required: e.target.checked,
-                    })
-                  }
-                  className="h-4 w-4 accent-indigo-600"
-                />
+                {!editingField && (
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#20201F]">
+                      Input Type *
+                    </label>
+                    <select
+                      value={form.fieldType}
+                      onChange={(e) =>
+                        setForm({ ...form, fieldType: e.target.value as FieldType })
+                      }
+                      className={inputClass}
+                    >
+                      {fieldTypes.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    Required question
-                  </p>
-
-                  <p className="text-xs text-slate-500">
-                    Participants must answer this question.
-                  </p>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#20201F]">
+                    Help / Placeholder Text (Optional)
+                  </label>
+                  <input
+                    value={form.placeholder}
+                    onChange={(e) =>
+                      setForm({ ...form, placeholder: e.target.value })
+                    }
+                    placeholder="e.g. Vegetarian, Vegan, Gluten-free"
+                    className={inputClass}
+                  />
                 </div>
-              </label>
 
-              {/* Actions */}
-              <div className="flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:justify-end">
+                {needsOptions && (
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#20201F]">
+                      Options (One per line) *
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={form.options}
+                      onChange={(e) =>
+                        setForm({ ...form, options: e.target.value })
+                      }
+                      placeholder={"Option 1\nOption 2\nOption 3"}
+                      className={inputClass}
+                    />
+                  </div>
+                )}
 
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  disabled={saving}
-                  className="rounded-xl border border-slate-200 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
+                <div className="pt-2">
+                  <label className="flex items-center gap-3 text-sm font-semibold text-[#20201F] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.required}
+                      onChange={(e) =>
+                        setForm({ ...form, required: e.target.checked })
+                      }
+                      className="h-4 w-4 rounded accent-[#E85D3F]"
+                    />
+                    <span>Make this question required for registration</span>
+                  </label>
+                </div>
 
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  <Save size={17} />
-
-                  {saving
-                    ? "Saving..."
-                    : editingField
-                      ? "Update Question"
-                      : "Create Question"}
-                </button>
-
-              </div>
-            </form>
+                <div className="flex gap-3 pt-5 border-t border-black/10">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    disabled={saving}
+                    className="flex-1 rounded-xl border border-black/15 px-4 py-3 text-xs font-bold uppercase tracking-wider text-[#20201F] hover:bg-[#FAF7F2]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex-1 rounded-xl bg-[#E85D3F] px-4 py-3 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#20201F] disabled:opacity-50"
+                  >
+                    {saving ? "Saving..." : editingField ? "Update Question" : "Create Question"}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </main>
+
+      <Footer />
     </div>
   );
 }

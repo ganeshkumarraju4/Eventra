@@ -114,3 +114,14 @@ export const authMiddleware = async (
     }
 };
 
+export const optionalAuthMiddleware = (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
+    if (!req.headers.authorization) {
+        return next();
+    }
+
+    return authMiddleware(req, res, next);
+};

@@ -1,13 +1,17 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
+  Clock3,
   LoaderCircle,
   Send,
+  Ticket,
 } from "lucide-react";
 import api from "../api/axios";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
 
 type FieldType =
   | "TEXT"
@@ -39,6 +43,7 @@ interface EventItem {
   endTime: string;
   status: string;
   type: "PUBLIC" | "PRIVATE";
+  registrationMode: "OPEN" | "APPROVAL_REQUIRED";
 }
 
 function getOptions(options: RegistrationField["options"]): string[] {
@@ -56,13 +61,8 @@ function getOptions(options: RegistrationField["options"]): string[] {
   return [];
 }
 
-function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
+const inputClass =
+  "mt-1.5 w-full rounded-xl border border-black/15 bg-white px-4 py-3 text-sm text-[#20201F] outline-none transition placeholder:text-[#9C968F] focus:border-[#E85D3F] focus:ring-4 focus:ring-[#E85D3F]/10";
 
 export default function EventRegistration() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -70,9 +70,9 @@ export default function EventRegistration() {
 
   const [event, setEvent] = useState<EventItem | null>(null);
   const [fields, setFields] = useState<RegistrationField[]>([]);
- const [answers, setAnswers] = useState<
-  Record<string, string | boolean | string[]>
->({});
+  const [answers, setAnswers] = useState<
+    Record<string, string | boolean | string[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -97,8 +97,7 @@ export default function EventRegistration() {
         if (!active) return;
 
         const fetchedEvent: EventItem = eventResponse.data.event;
-        const fetchedFields: RegistrationField[] =
-          fieldsResponse.data.fields;
+        const fetchedFields: RegistrationField[] = fieldsResponse.data.fields;
 
         if (fetchedEvent.status !== "APPROVED") {
           setError("Registration is available only for approved events.");
@@ -106,22 +105,17 @@ export default function EventRegistration() {
         }
 
         if (fetchedEvent.type !== "PUBLIC") {
-          setError("This event is not available for public registration.");
+          setError("This event is not open for public registration.");
           return;
         }
 
         setEvent(fetchedEvent);
-        setFields(
-          [...fetchedFields].sort((a, b) => a.order - b.order)
-        );
+        setFields([...fetchedFields].sort((a, b) => a.order - b.order));
       } catch (err: unknown) {
         if (active) {
           const axiosError = err as {
-            response?: {
-              data?: { message?: string };
-            };
+            response?: { data?: { message?: string } };
           };
-
           setError(
             axiosError.response?.data?.message ??
               "Unable to load the registration form."
@@ -156,22 +150,22 @@ export default function EventRegistration() {
     }
 
     for (const field of fields) {
-  const value = answers[field.id];
+      const value = answers[field.id];
 
-  if (!field.required) continue;
+      if (!field.required) continue;
 
-  const isMissing =
-    value === undefined ||
-    value === "" ||
-    value === false ||
-    (Array.isArray(value) && value.length === 0) ||
-    (typeof value === "string" && value.trim() === "");
+      const isMissing =
+        value === undefined ||
+        value === "" ||
+        value === false ||
+        (Array.isArray(value) && value.length === 0) ||
+        (typeof value === "string" && value.trim() === "");
 
-  if (isMissing) {
-    setError(`${field.label} is required.`);
-    return;
-  }
-}
+      if (isMissing) {
+        setError(`"${field.label}" is a required field.`);
+        return;
+      }
+    }
 
     const payloadAnswers = fields
       .filter((field) => answers[field.id] !== undefined)
@@ -191,14 +185,12 @@ export default function EventRegistration() {
       setSuccessStatus(response.data.registration.status);
     } catch (err: unknown) {
       const axiosError = err as {
-        response?: {
-          data?: { message?: string };
-        };
+        response?: { data?: { message?: string } };
       };
 
       setError(
         axiosError.response?.data?.message ??
-          "Registration failed. Please try again."
+          "Registration failed. You might already be registered for this event."
       );
     } finally {
       setSubmitting(false);
@@ -207,250 +199,280 @@ export default function EventRegistration() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f7f7fb]">
-        <LoaderCircle className="animate-spin text-[#5147a5]" size={30} />
+      <div className="min-h-screen bg-[#FAF7F2] flex flex-col justify-between">
+        <Navbar />
+        <div className="flex flex-1 items-center justify-center">
+          <LoaderCircle className="animate-spin text-[#E85D3F]" size={36} />
+        </div>
+        <Footer />
       </div>
     );
   }
 
   if (error && !event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#f7f7fb] px-5 text-center">
-        <h1 className="text-2xl font-bold">Registration unavailable</h1>
-        <p className="mt-3 text-sm text-gray-500">{error}</p>
-        <button
-          onClick={() => navigate(eventId ? `/events/${eventId}` : "/events")}
-          className="mt-6 rounded-xl bg-[#5147a5] px-5 py-3 text-sm font-semibold text-white"
-        >
-          Back to Event
-        </button>
+      <div className="min-h-screen bg-[#FAF7F2] flex flex-col justify-between">
+        <Navbar />
+        <div className="flex flex-1 flex-col items-center justify-center px-5 text-center">
+          <div className="rounded-2xl border border-red-200 bg-white p-8 max-w-md shadow-sm">
+            <h1 className="text-xl font-bold text-[#20201F]">
+              Registration unavailable
+            </h1>
+            <p className="mt-2 text-sm text-[#77736E]">{error}</p>
+            <button
+              onClick={() => navigate(eventId ? `/events/${eventId}` : "/events")}
+              className="mt-6 rounded-xl bg-[#20201F] px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#E85D3F] transition"
+            >
+              Back to Event
+            </button>
+          </div>
+        </div>
+        <Footer />
       </div>
     );
   }
 
   if (successStatus) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f7f7fb] px-5">
-        <div className="w-full max-w-lg rounded-3xl border border-gray-100 bg-white p-8 text-center shadow-sm sm:p-10">
-          <CheckCircle2 className="mx-auto text-green-500" size={54} />
+      <div className="min-h-screen bg-[#FAF7F2] flex flex-col justify-between">
+        <Navbar />
+        <div className="flex flex-1 items-center justify-center px-5 py-12">
+          <div className="w-full max-w-lg rounded-3xl border border-black/[0.08] bg-white p-8 sm:p-12 text-center shadow-xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#EBF5E8] text-[#266B22]">
+              <CheckCircle2 size={36} />
+            </div>
 
-          <h1 className="mt-5 text-2xl font-bold text-[#24243a]">
-            Registration successful!
-          </h1>
+            <span className="inline-block mt-6 rounded-full bg-[#E85D3F]/10 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
+              Confirmed Registration
+            </span>
 
-          <p className="mt-3 text-sm leading-6 text-gray-500">
-            Your registration for {event?.title} has been submitted.
-          </p>
+            <h1 className="mt-3 text-3xl font-black text-[#20201F]">
+              You're on the list!
+            </h1>
 
-          <p className="mt-5 inline-flex rounded-full bg-[#f0effb] px-4 py-2 text-sm font-semibold text-[#5147a5]">
-            Status: {successStatus}
-          </p>
+            <p className="mt-3 text-sm leading-relaxed text-[#77736E]">
+              Your registration for <strong className="text-[#20201F] font-bold">{event?.title}</strong> has been received.
+            </p>
 
-          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="flex-1 rounded-xl bg-[#5147a5] px-5 py-3 text-sm font-semibold text-white"
-            >
-              Go to Dashboard
-            </button>
+            <div className="mt-6 rounded-2xl bg-[#FAF7F2] p-4 border border-black/10 inline-flex items-center gap-3">
+              <Ticket size={20} className="text-[#E85D3F]" />
+              <span className="text-xs font-bold text-[#20201F]">
+                Registration Status:{" "}
+                <span className={successStatus === "APPROVED" ? "text-[#266B22]" : "text-[#B45309]"}>
+                  {successStatus}
+                </span>
+              </span>
+            </div>
 
-            <button
-              onClick={() => navigate("/events")}
-              className="flex-1 rounded-xl border border-gray-200 px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-            >
-              Explore More
-            </button>
+            <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+              <Link
+                to="/my-registrations"
+                className="rounded-xl bg-[#E85D3F] px-6 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-sm hover:bg-[#20201F] transition"
+              >
+                View My Tickets
+              </Link>
+              <Link
+                to={`/events/${eventId}`}
+                className="rounded-xl border border-black/15 bg-white px-6 py-3 text-xs font-bold uppercase tracking-wider text-[#20201F] hover:bg-[#FAF7F2] transition"
+              >
+                Return to Event Page
+              </Link>
+            </div>
           </div>
         </div>
+        <Footer />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f7f7fb] text-[#24243a]">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4 sm:px-8">
-          <button
-            onClick={() => navigate(`/events/${eventId}`)}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#5147a5]"
-          >
-            <ArrowLeft size={18} />
-            Back to Event
-          </button>
+    <div className="min-h-screen bg-[#FAF7F2] text-[#20201F] flex flex-col justify-between">
+      <Navbar />
 
-          <span className="text-xl font-extrabold text-[#393477]">
-            Eventra<span className="text-[#8c83e8]">.</span>
-          </span>
-        </div>
-      </header>
+      <main className="flex-1 mx-auto w-full max-w-2xl px-5 py-8 sm:px-8 sm:py-12">
+        <Link
+          to={`/events/${eventId}`}
+          className="inline-flex items-center gap-2 text-sm font-bold text-[#77736E] transition hover:text-[#E85D3F] mb-6"
+        >
+          <ArrowLeft size={16} />
+          Back to Event Details
+        </Link>
 
-      <main className="mx-auto max-w-3xl px-5 py-8 sm:px-8 sm:py-12">
-        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-10">
-          <div className="border-b border-gray-100 pb-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f0effb] text-[#5147a5]">
-              <CalendarDays size={24} />
-            </div>
-
-            <h1 className="mt-5 text-3xl font-extrabold">
+        {/* Form Container */}
+        <div className="rounded-3xl border border-black/[0.08] bg-white p-6 sm:p-10 shadow-sm">
+          {/* Header */}
+          <div className="border-b border-black/10 pb-6">
+            <span className="rounded-full bg-[#E85D3F]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
               Event Registration
+            </span>
+
+            <h1 className="mt-3 text-2xl font-black text-[#20201F] sm:text-3xl">
+              {event?.title}
             </h1>
 
-            <p className="mt-2 text-sm leading-6 text-gray-500">
-              Complete the form below to register for this event.
-            </p>
-
             {event && (
-              <div className="mt-5 rounded-2xl bg-[#faf9ff] p-4">
-                <h2 className="font-bold">{event.title}</h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  {formatDate(event.startTime)}
-                </p>
+              <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-[#77736E]">
+                <span className="flex items-center gap-1 font-semibold text-[#20201F]">
+                  <CalendarDays size={14} className="text-[#E85D3F]" />
+                  {new Date(event.startTime).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+
+                <span className="flex items-center gap-1">
+                  <Clock3 size={14} />
+                  {new Date(event.startTime).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
               </div>
             )}
           </div>
 
+          {error && (
+            <div
+              role="alert"
+              className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700"
+            >
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="mt-7 space-y-6">
             {fields.length === 0 ? (
-              <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
-                No additional information is required. You can submit your
-                registration below.
-              </p>
+              <div className="rounded-2xl bg-[#FAF7F2] p-5 text-center text-xs text-[#77736E] border border-black/10">
+                <p className="font-semibold text-[#20201F]">
+                  Standard One-Click RSVP
+                </p>
+                <p className="mt-1">
+                  This organizer has not requested additional custom questions.
+                  Click below to confirm your spot with your profile.
+                </p>
+              </div>
             ) : (
               fields.map((field) => {
-                const inputClass =
-                  "mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-[#5147a5] focus:ring-2 focus:ring-[#5147a5]/10";
+                const options = getOptions(field.options);
+                const currentAnswer = answers[field.id];
 
                 return (
-                  <div key={field.id}>
-                    <label
-                      htmlFor={field.id}
-                      className="text-sm font-semibold text-gray-700"
-                    >
-                      {field.label}
-                      {field.required && (
-                        <span className="ml-1 text-red-500">*</span>
-                      )}
+                  <div key={field.id} className="space-y-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#20201F]">
+                      {field.label} {field.required && <span className="text-[#E85D3F]">*</span>}
                     </label>
 
-                    {field.fieldType === "TEXTAREA" ? (
+                    {/* TEXTAREA */}
+                    {field.fieldType === "TEXTAREA" && (
                       <textarea
-                        id={field.id}
-                        required={field.required}
-                        placeholder={field.placeholder ?? ""}
-                        value={String(answers[field.id] ?? "")}
-                        onChange={(e) =>
-                          updateAnswer(field.id, e.target.value)
-                        }
-                        rows={4}
+                        rows={3}
+                        placeholder={field.placeholder ?? undefined}
+                        value={(currentAnswer as string) ?? ""}
+                        onChange={(e) => updateAnswer(field.id, e.target.value)}
                         className={inputClass}
                       />
-                    ) : field.fieldType === "SELECT" ? (
+                    )}
+
+                    {/* SELECT */}
+                    {field.fieldType === "SELECT" && (
                       <select
-                        id={field.id}
-                        required={field.required}
-                        value={String(answers[field.id] ?? "")}
-                        onChange={(e) =>
-                          updateAnswer(field.id, e.target.value)
-                        }
+                        value={(currentAnswer as string) ?? ""}
+                        onChange={(e) => updateAnswer(field.id, e.target.value)}
                         className={inputClass}
                       >
-                        <option value="">Select an option</option>
-                        {getOptions(field.options).map((option) => (
+                        <option value="">
+                          {field.placeholder || "— Please select an option —"}
+                        </option>
+                        {options.map((option) => (
                           <option key={option} value={option}>
                             {option}
                           </option>
                         ))}
                       </select>
-                    ) : field.fieldType === "CHECKBOX" ? (
-                    <div className="mt-3 space-y-3">
-                        {getOptions(field.options).map((option) => {
-                        const selectedOptions = Array.isArray(answers[field.id])
-                            ? (answers[field.id] as string[])
-                            : [];
-
-                        return (
-                            <label
-                            key={option}
-                            className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 p-4 transition hover:border-[#5147a5] hover:bg-[#faf9ff]"
-                            >
-                            <input
-                                type="checkbox"
-                                checked={selectedOptions.includes(option)}
-                                onChange={(e) => {
-                                const updatedOptions = e.target.checked
-                                    ? [...selectedOptions, option]
-                                    : selectedOptions.filter((item) => item !== option);
-
-                                updateAnswer(field.id, updatedOptions);
-                                }}
-                                className="h-4 w-4 accent-[#5147a5]"
-                            />
-
-                            <span className="text-sm text-gray-600">{option}</span>
-                            </label>
-                        );
-                        })}
-                    </div>
-                    ) : (
-                      <input
-                        id={field.id}
-                        type={
-                          field.fieldType === "EMAIL"
-                            ? "email"
-                            : field.fieldType === "NUMBER"
-                              ? "number"
-                              : field.fieldType === "PHONE"
-                                ? "tel"
-                                : field.fieldType === "URL"
-                                  ? "url"
-                                  : field.fieldType === "DATE"
-                                    ? "date"
-                                    : "text"
-                        }
-                        required={field.required}
-                        placeholder={field.placeholder ?? ""}
-                        value={String(answers[field.id] ?? "")}
-                        onChange={(e) =>
-                          updateAnswer(field.id, e.target.value)
-                        }
-                        className={inputClass}
-                      />
                     )}
+
+                    {/* CHECKBOX */}
+                    {field.fieldType === "CHECKBOX" && (
+                      <div className="pt-1 space-y-2">
+                        {options.map((option) => {
+                          const selected = Array.isArray(currentAnswer)
+                            ? currentAnswer.includes(option)
+                            : false;
+
+                          return (
+                            <label
+                              key={option}
+                              className="flex items-center gap-3 text-sm text-[#20201F] cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={(e) => {
+                                  const list = Array.isArray(currentAnswer)
+                                    ? [...currentAnswer]
+                                    : [];
+                                  if (e.target.checked) {
+                                    list.push(option);
+                                  } else {
+                                    const index = list.indexOf(option);
+                                    if (index > -1) list.splice(index, 1);
+                                  }
+                                  updateAnswer(field.id, list);
+                                }}
+                                className="h-4 w-4 rounded accent-[#E85D3F]"
+                              />
+                              <span>{option}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* STANDARD INPUTS */}
+                    {field.fieldType !== "TEXTAREA" &&
+                      field.fieldType !== "SELECT" &&
+                      field.fieldType !== "CHECKBOX" && (
+                        <input
+                          type={
+                            field.fieldType === "NUMBER"
+                              ? "number"
+                              : field.fieldType === "EMAIL"
+                              ? "email"
+                              : field.fieldType === "PHONE"
+                              ? "tel"
+                              : field.fieldType === "URL"
+                              ? "url"
+                              : field.fieldType === "DATE"
+                              ? "date"
+                              : "text"
+                          }
+                          placeholder={field.placeholder ?? undefined}
+                          value={(currentAnswer as string) ?? ""}
+                          onChange={(e) => updateAnswer(field.id, e.target.value)}
+                          className={inputClass}
+                        />
+                      )}
                   </div>
                 );
               })
             )}
 
-            {error && (
-              <div
-                role="alert"
-                className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600"
+            <div className="pt-6 border-t border-black/10">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#E85D3F] px-6 py-4 text-sm font-bold text-white shadow-md shadow-[#E85D3F]/20 hover:bg-[#20201F] transition disabled:opacity-50 cursor-pointer"
               >
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#5147a5] px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-[#403687] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitting ? (
-                <>
-                  <LoaderCircle size={18} className="animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Send size={18} />
-                  Submit Registration
-                </>
-              )}
-            </button>
+                <Send size={16} />
+                {submitting ? "Submitting Registration..." : "Confirm Registration"}
+              </button>
+            </div>
           </form>
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }
-

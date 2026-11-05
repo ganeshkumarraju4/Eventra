@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   CalendarDays,
-  Clock3,
   MapPin,
   Users,
   Ticket,
+  Sparkles,
+  ShieldAlert,
+  CheckCircle2,
 } from "lucide-react";
 import api from "../api/axios";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
+import { useAuth } from "../context/AuthContext";
 
 interface EventItem {
   id: string;
@@ -16,39 +21,34 @@ interface EventItem {
   description: string;
   category: string;
   type: "PUBLIC" | "PRIVATE";
+  registrationMode: "OPEN" | "APPROVAL_REQUIRED";
   startTime: string;
   endTime: string;
   maxParticipants: number | null;
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
-  venueId?: string;
+  isRegistered?: boolean;
+  venue?: {
+    name: string;
+    location: string;
+    capacity: number;
+  } | null;
   organizerId?: string;
-}
-
-function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function formatTime(dateString: string) {
-  return new Date(dateString).toLocaleTimeString("en-IN", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  organizer?: {
+    name: string;
+    email: string;
+  };
 }
 
 export default function EventDetails() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
 
   const [event, setEvent] = useState<EventItem | null>(null);
-  const [venue, setVenue] = useState<{
-    name: string;
-    location: string;
-    capacity: number;
+  const [registrationCheck, setRegistrationCheck] = useState<{
+    eventId: string;
+    userId: string;
+    isRegistered: boolean;
   } | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -69,30 +69,7 @@ export default function EventDetails() {
         const fetchedEvent: EventItem = response.data.event;
 
         if (!active) return;
-
         setEvent(fetchedEvent);
-
-        // The getEvent endpoint currently returns the event without its venue.
-        // Fetch venues separately and match the event's venueId.
-        if (fetchedEvent.venueId) {
-          const venueResponse = await api.get("/venues");
-          const venueList = venueResponse.data.venues;
-
-          if (active && Array.isArray(venueList)) {
-            const matchedVenue = venueList.find(
-              (item: {
-                id: string;
-                name: string;
-                location: string;
-                capacity: number;
-              }) => item.id === fetchedEvent.venueId
-            );
-
-            if (matchedVenue) {
-              setVenue(matchedVenue);
-            }
-          }
-        }
       } catch (err: unknown) {
         if (active) {
           const axiosError = err as {
@@ -121,180 +98,297 @@ export default function EventDetails() {
     };
   }, [eventId]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f7f7fb]">
-        <div className="text-sm font-medium text-gray-500">
-          Loading event details...
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    let active = true;
 
-  if (error || !event) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#f7f7fb] px-5 text-center">
-        <h1 className="text-2xl font-bold text-[#24243a]">
-          Event unavailable
-        </h1>
-        <p className="mt-2 text-sm text-gray-500">
-          {error || "We couldn't find this event."}
-        </p>
-        <button
-          onClick={() => navigate("/events")}
-          className="mt-6 rounded-xl bg-[#5147a5] px-5 py-3 text-sm font-semibold text-white hover:bg-[#403687]"
-        >
-          Back to Events
-        </button>
-      </div>
-    );
-  }
+    async function checkRegistration() {
+      if (!eventId || !isAuthenticated || !user?.id) return;
+
+      try {
+        const response = await api.get("/registrations/my");
+        const registrations = response.data.registrations;
+        const hasRegistration =
+          Array.isArray(registrations) &&
+          registrations.some(
+            (registration: { eventId: string }) =>
+              registration.eventId === eventId
+          );
+
+        if (active) {
+          setRegistrationCheck({
+            eventId,
+            userId: user.id,
+            isRegistered: hasRegistration,
+          });
+        }
+      } catch (err) {
+        console.warn("Could not check event registration status:", err);
+      }
+    }
+
+    void checkRegistration();
+
+    return () => {
+      active = false;
+    };
+  }, [eventId, isAuthenticated, user?.id]);
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  };
+
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString("en-IN", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
 
   return (
-    <div className="min-h-screen bg-[#f7f7fb] text-[#24243a]">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-          <button
-            onClick={() => navigate("/events")}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#5147a5]"
-          >
-            <ArrowLeft size={18} />
-            Back to Events
-          </button>
+    <div className="min-h-screen bg-[#FAF7F2] text-[#20201F] flex flex-col justify-between">
+      <Navbar />
 
-          <span className="text-xl font-extrabold tracking-tight text-[#393477]">
-            Eventra<span className="text-[#8c83e8]">.</span>
-          </span>
-        </div>
-      </header>
+      <main className="flex-1 mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 sm:py-12">
+        <Link
+          to="/events"
+          className="inline-flex items-center gap-2 text-sm font-bold text-[#77736E] transition hover:text-[#E85D3F] mb-6"
+        >
+          <ArrowLeft size={16} />
+          Back to all events
+        </Link>
 
-      <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
-        <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
-          <div className="relative h-56 sm:h-80">
-            <img
-              src={`/events/${event.category.toLowerCase()}.jpg`}
-              alt={`${event.category.toLowerCase()} event`}
-              className="h-full w-full object-cover"
-              onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = "/events/other.jpg";
-              }}
-            />
-
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-
-            <span className="absolute bottom-5 left-5 rounded-full bg-white px-4 py-2 text-xs font-bold text-[#5147a5]">
-              {event.category.charAt(0) +
-                event.category.slice(1).toLowerCase()}
-            </span>
-
-            <span className="absolute right-5 top-5 rounded-full bg-black/40 px-4 py-2 text-xs font-semibold text-white backdrop-blur-sm">
-              {event.status}
-            </span>
+        {loading ? (
+          <div className="flex min-h-[40vh] flex-col items-center justify-center">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#E85D3F]/20 border-t-[#E85D3F]" />
+            <p className="mt-4 text-sm font-semibold text-[#77736E]">
+              Loading event details...
+            </p>
           </div>
+        ) : error || !event ? (
+          <div className="rounded-2xl border border-red-200 bg-white p-10 text-center max-w-lg mx-auto shadow-sm">
+            <ShieldAlert size={36} className="mx-auto text-red-600 mb-3" />
+            <h1 className="text-xl font-bold text-[#20201F]">
+              Event unavailable
+            </h1>
+            <p className="mt-2 text-sm text-[#77736E]">
+              {error || "We couldn't locate this event."}
+            </p>
+            <button
+              onClick={() => navigate("/events")}
+              className="mt-6 rounded-xl bg-[#20201F] px-6 py-3 text-sm font-bold text-white hover:bg-[#E85D3F] transition"
+            >
+              Explore Other Events
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+            {/* Left Column: Event Details */}
+            <div className="space-y-8">
+              {/* Event Header Banner Card */}
+              <div className="overflow-hidden rounded-3xl border border-black/[0.08] bg-white p-6 sm:p-10 shadow-sm">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-full bg-[#E85D3F]/10 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
+                    {event.category}
+                  </span>
 
-          <div className="grid gap-10 p-6 sm:p-10 lg:grid-cols-[1fr_300px]">
-            <section>
-              <h1 className="text-3xl font-extrabold leading-tight sm:text-4xl">
-                {event.title}
-              </h1>
+                  <span className="rounded-full border border-black/10 bg-[#FAF7F2] px-3 py-1 text-xs font-bold uppercase tracking-widest text-[#77736E]">
+                    {event.type}
+                  </span>
 
-              <p className="mt-5 whitespace-pre-line text-base leading-7 text-gray-600">
-                {event.description}
-              </p>
-
-              <div className="mt-8 grid gap-5 border-t border-gray-100 pt-7 sm:grid-cols-2">
-                <div className="flex items-start gap-3">
-                  <CalendarDays
-                    size={20}
-                    className="mt-1 shrink-0 text-[#7770d8]"
-                  />
-                  <div>
-                    <p className="text-sm font-semibold">Date</p>
-                    <p className="mt-1 text-sm text-gray-500">
-                      {formatDate(event.startTime)}
-                    </p>
-                  </div>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+                      event.status === "APPROVED"
+                        ? "bg-[#EBF5E8] text-[#266B22] border border-[#C7E6C0]"
+                        : "bg-[#FEF5E7] text-[#B45309] border border-[#FADFA8]"
+                    }`}
+                  >
+                    {event.status}
+                  </span>
                 </div>
 
-                <div className="flex items-start gap-3">
-                  <Clock3
-                    size={20}
-                    className="mt-1 shrink-0 text-[#7770d8]"
-                  />
-                  <div>
-                    <p className="text-sm font-semibold">Time</p>
-                    <p className="mt-1 text-sm text-gray-500">
-                      {formatTime(event.startTime)} –{" "}
-                      {formatTime(event.endTime)}
-                    </p>
-                  </div>
-                </div>
+                <h1 className="mt-6 text-3xl font-black leading-tight tracking-tight sm:text-4xl md:text-5xl">
+                  {event.title}
+                </h1>
 
-                <div className="flex items-start gap-3">
-                  <MapPin
-                    size={20}
-                    className="mt-1 shrink-0 text-[#7770d8]"
-                  />
-                  <div>
-                    <p className="text-sm font-semibold">Venue</p>
-                    <p className="mt-1 text-sm text-gray-500">
-                      {venue?.name ?? "Venue details unavailable"}
-                    </p>
-                    {venue?.location && (
-                      <p className="mt-1 text-xs text-gray-400">
-                        {venue.location}
+                {/* Key Meta row */}
+                <div className="mt-8 grid gap-4 sm:grid-cols-2 border-t border-black/10 pt-6">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FBE6DF] text-[#E85D3F]">
+                      <CalendarDays size={20} />
+                    </span>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-[#77736E]">
+                        Date & Time
                       </p>
-                    )}
+                      <p className="mt-1 font-bold text-[#20201F]">
+                        {formatDate(event.startTime)}
+                      </p>
+                      <p className="text-xs text-[#77736E]">
+                        {formatTime(event.startTime)} – {formatTime(event.endTime)}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex items-start gap-3">
-                  <Users
-                    size={20}
-                    className="mt-1 shrink-0 text-[#7770d8]"
-                  />
-                  <div>
-                    <p className="text-sm font-semibold">Capacity</p>
-                    <p className="mt-1 text-sm text-gray-500">
-                      {event.maxParticipants ??
-                        venue?.capacity ??
-                        "Not specified"}
-                      {event.maxParticipants !== null &&
-                      event.maxParticipants !== undefined
-                        ? " participants"
-                        : venue
-                          ? " people at venue"
-                          : ""}
-                    </p>
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FBE6DF] text-[#E85D3F]">
+                      <MapPin size={20} />
+                    </span>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-[#77736E]">
+                        Location
+                      </p>
+                      <p className="mt-1 font-bold text-[#20201F]">
+                        {event.venue?.name ?? "Venue confirmed upon registration"}
+                      </p>
+                      <p className="text-xs text-[#77736E]">
+                        {event.venue?.location ?? "Location pending"}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </section>
 
-<aside className="h-fit rounded-2xl border border-gray-100 bg-[#faf9ff] p-6">
-  <p className="text-sm text-gray-500">Ready to attend?</p>
+              {/* Event Description Section */}
+              <div className="rounded-3xl border border-black/[0.08] bg-white p-6 sm:p-10 shadow-sm">
+                <h2 className="text-xl font-bold tracking-tight text-[#20201F]">
+                  About this experience
+                </h2>
 
-  <p className="mt-2 text-xl font-bold">Join this event</p>
+                <div className="mt-4 whitespace-pre-line text-sm leading-relaxed text-[#77736E] sm:text-base">
+                  {event.description}
+                </div>
 
-  <p className="mt-2 text-sm leading-6 text-gray-500">
-    Secure your spot and be part of the experience.
-  </p>
+                {/* Additional Venue & Capacity Info */}
+                <div className="mt-8 grid gap-4 sm:grid-cols-2 border-t border-black/10 pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FAF7F2] text-[#20201F]">
+                      <Users size={18} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase text-[#77736E]">Capacity</p>
+                      <p className="text-sm font-bold text-[#20201F]">
+                        {event.maxParticipants
+                          ? `Up to ${event.maxParticipants} attendees`
+                          : event.venue?.capacity
+                          ? `${event.venue.capacity} venue limit`
+                          : "Open attendance"}
+                      </p>
+                    </div>
+                  </div>
 
-  <button
-    onClick={() => navigate(`/events/${event.id}/register`)}
-    className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#5147a5] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#403687]"
-  >
-    <Ticket size={18} />
-    Register for Event
-  </button>
-</aside>
-```
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FAF7F2] text-[#20201F]">
+                      <Sparkles size={18} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase text-[#77736E]">Admission</p>
+                      <p className="text-sm font-bold text-[#20201F]">
+                        {event.registrationMode === "APPROVAL_REQUIRED"
+                          ? "Application Required"
+                          : "Free & Open RSVP"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
+            {/* Right Column: Sticky RSVP Action Card */}
+            <div className="h-fit lg:sticky lg:top-24 space-y-4">
+              <div className="rounded-3xl border border-black/[0.08] bg-white p-7 shadow-lg">
+                <div className="flex items-center justify-between pb-5 border-b border-black/10">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-[#E85D3F]">
+                      Join Event
+                    </p>
+                    <p className="mt-1 text-2xl font-black text-[#20201F]">
+                      Free Registration
+                    </p>
+                  </div>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FBE6DF] text-[#E85D3F]">
+                    <Ticket size={24} />
+                  </div>
+                </div>
+
+                <div className="py-5 space-y-3 text-xs text-[#77736E]">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-[#266B22]" />
+                    <span>Instant confirmation sent to your profile</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-[#266B22]" />
+                    <span>
+                      {event.registrationMode === "APPROVAL_REQUIRED"
+                        ? "Host will review your answers"
+                        : "Direct entry upon registration"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-[#266B22]" />
+                    <span>Cancel or update anytime from your dashboard</span>
+                  </div>
+                </div>
+
+                {event.isRegistered ||
+                (registrationCheck?.eventId === event.id &&
+                  registrationCheck.userId === user?.id &&
+                  registrationCheck.isRegistered) ? (
+                  <div
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C7E6C0] bg-[#EBF5E8] px-5 py-4 text-sm font-bold text-[#266B22]"
+                    role="status"
+                  >
+                    <CheckCircle2 size={18} />
+                    Registered
+                  </div>
+                ) : isAuthenticated &&
+                  (!registrationCheck ||
+                    registrationCheck.eventId !== event.id ||
+                    registrationCheck.userId !== user?.id) ? (
+                  <div
+                    className="flex w-full items-center justify-center rounded-xl border border-black/10 bg-[#FAF7F2] px-5 py-4 text-sm font-semibold text-[#77736E]"
+                    role="status"
+                  >
+                    Checking registration...
+                  </div>
+                ) : event.status === "APPROVED" ? (
+                  <button
+                    onClick={() => {
+                      const registrationPath = `/events/${event.id}/register`;
+                      navigate(
+                        isAuthenticated
+                          ? registrationPath
+                          : "/login",
+                        isAuthenticated
+                          ? undefined
+                          : { state: { redirectTo: registrationPath } }
+                      );
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#E85D3F] px-5 py-4 text-sm font-bold text-white shadow-md shadow-[#E85D3F]/20 transition hover:bg-[#20201F] hover:shadow-none cursor-pointer"
+                  >
+                    <Ticket size={18} />
+                    Register for Event
+                  </button>
+                ) : (
+                  <div className="rounded-xl bg-[#FEF5E7] p-4 text-center text-xs font-bold text-[#B45309]">
+                    Registration is unavailable because this event is currently {event.status.toLowerCase()}.
+                  </div>
+                )}
+
+                <p className="mt-4 text-center text-[11px] text-[#77736E]">
+                  Safe & verified event hosted on Eventra.
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </main>
+
+      <Footer />
     </div>
   );
 }
-

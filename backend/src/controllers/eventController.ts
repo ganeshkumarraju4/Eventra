@@ -316,11 +316,30 @@ export async function getApprovedEvents(req: Request, res: Response) {
     }
 }
 
+export async function getAdminEvents(req: Request, res: Response) {
+    try {
+        const events = await prisma.event.findMany({
+            orderBy: {
+                createdAt: "desc"
+            }
+        });
+
+        return res.status(200).json({
+            message: "Events fetched successfully",
+            events
+        });
+    } catch (error) {
+        console.error("Get admin events error:", error);
+
+        return res.status(500).json({
+            message: "Failed to fetch events"
+        });
+    }
+}
+
 export async function getEvent(req: Request, res: Response) {
     try {
         const eventId = String(req.params.eventId);
-        const userId = req.user!.id;
-        const userRole = req.user!.role;
 
         if (!eventId || eventId === "undefined") {
             return res.status(400).json({
@@ -331,6 +350,13 @@ export async function getEvent(req: Request, res: Response) {
         const event = await prisma.event.findUnique({
             where: {
                 id: eventId
+            },
+            include: {
+                booking: {
+                    include: {
+                        venue: true
+                    }
+                }
             }
         });
 
@@ -340,20 +366,36 @@ export async function getEvent(req: Request, res: Response) {
             });
         }
 
-        // Private events are visible only to their organizer and admins.
-        if (
-            event.type === "PRIVATE" &&
-            event.organizerId !== userId &&
-            userRole !== "ADMIN"
-        ) {
+        const registration = req.user
+            ? await prisma.registration.findFirst({
+                  where: {
+                      eventId,
+                      userId: req.user.id
+                  },
+                  select: {
+                      id: true
+                  }
+              })
+            : null;
+
+        const isOrganizer = event.organizerId === req.user?.id;
+        const isAdmin = req.user?.role === "ADMIN";
+        const isPubliclyVisible =
+            event.type === "PUBLIC" && event.status === "APPROVED";
+
+        if (!isPubliclyVisible && !isOrganizer && !isAdmin) {
             return res.status(403).json({
-                message: "You are not authorized to view this private event"
+                message: "You are not authorized to view this event"
             });
         }
 
         return res.status(200).json({
             message: "Event fetched successfully",
-            event
+            event: {
+                ...event,
+                venue: event.booking?.venue ?? null,
+                isRegistered: registration !== null
+            }
         });
     } catch (error) {
         console.error("Get event error:", error);

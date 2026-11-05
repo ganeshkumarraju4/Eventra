@@ -16,14 +16,12 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-const handleSubmit = async (
-  event: React.SubmitEvent<HTMLFormElement>
-) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
 
     if (!name.trim() || !email.trim() || !password) {
-      setError("Please fill in all the fields.");
+      setError("Please complete all required fields.");
       return;
     }
 
@@ -33,7 +31,7 @@ const handleSubmit = async (
     }
 
     if (password.length < 8) {
-      setError("Your password must contain at least 8 characters.");
+      setError("Password must contain at least 8 characters.");
       return;
     }
 
@@ -56,242 +54,234 @@ const handleSubmit = async (
         state: { message: "Account created successfully! Please sign in." },
       });
     } catch (err: unknown) {
-      if (
-        typeof err === "object" &&
-        err !== null &&
-        "response" in err
-      ) {
+      if (typeof err === "object" && err !== null && "response" in err) {
         const response = (
           err as {
-            response?: {
-              data?: { message?: string };
-            };
+            response?: { data?: { message?: string } };
           }
         ).response;
 
         setError(
-          response?.data?.message ||
-            "Registration failed. Please try again."
+          response?.data?.message || "Registration failed. Please try again."
         );
       } else {
-        setError("Unable to connect to the server. Please try again.");
+        setError("Unable to connect to the server. Please check your network.");
       }
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
-    <main className="min-h-screen bg-[#faf8f4] text-[#20253b]">
-      <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6 sm:px-10">
-        <Link to="/" className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#303b76] text-white">
-            <CalendarDays size={21} />
-          </span>
-          <span className="text-xl font-bold tracking-tight">Eventra</span>
-        </Link>
-
-        <p className="text-sm text-gray-600">
-          Already a member?{" "}
-          <Link
-            to="/login"
-            className="font-semibold text-[#303b76] hover:underline"
-          >
-            Sign in
+    <div className="min-h-screen bg-[#FAF7F2] text-[#20201F] flex flex-col justify-between">
+      {/* Top Bar */}
+      <header className="border-b border-black/10 px-6 py-5 md:px-12">
+        <div className="mx-auto flex max-w-7xl items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E85D3F] text-white shadow-sm">
+              <CalendarDays size={18} />
+            </span>
+            <span className="text-2xl font-black tracking-tight text-[#20201F]">
+              eventra<span className="text-[#E85D3F]">.</span>
+            </span>
           </Link>
-        </p>
-      </header>
 
-      <section className="mx-auto grid min-h-[calc(100vh-100px)] max-w-7xl items-center gap-12 px-6 py-10 sm:px-10 lg:grid-cols-2 lg:gap-20">
-        <div className="mx-auto w-full max-w-md">
-          <span className="inline-flex rounded-full bg-[#eeeef8] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#303b76]">
-            Your next chapter starts here
-          </span>
-
-          <h1 className="mt-7 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-            Make room for
-            <br />
-            <span className="text-[#e77c68]">great experiences.</span>
-          </h1>
-
-          <p className="mt-5 max-w-md leading-7 text-gray-600">
-            Create your Eventra account to discover events, manage
-            registrations, and keep everything happening in one place.
-          </p>
-
-          <form onSubmit={handleSubmit} className="mt-9 space-y-5">
-            <div>
-              <label
-                htmlFor="name"
-                className="mb-2 block text-sm font-semibold"
-              >
-                Full name
-              </label>
-              <input
-                id="name"
-                type="text"
-                autoComplete="name"
-                placeholder="Enter your full name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#303b76] focus:ring-4 focus:ring-[#303b76]/10"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-2 block text-sm font-semibold"
-              >
-                Email address
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#303b76] focus:ring-4 focus:ring-[#303b76]/10"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="password"
-                className="mb-2 block text-sm font-semibold"
-              >
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  placeholder="At least 8 characters"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3.5 pr-12 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#303b76] focus:ring-4 focus:ring-[#303b76]/10"
-                  required
-                  minLength={8}
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  onClick={() => setShowPassword((value) => !value)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-[#303b76]"
-                >
-                  {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor="confirmPassword"
-                className="mb-2 block text-sm font-semibold"
-              >
-                Confirm password
-              </label>
-              <div className="relative">
-                <input
-                  id="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  placeholder="Enter your password again"
-                  value={confirmPassword}
-                  onChange={(event) =>
-                    setConfirmPassword(event.target.value)
-                  }
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3.5 pr-12 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#303b76] focus:ring-4 focus:ring-[#303b76]/10"
-                  required
-                  minLength={8}
-                />
-                <button
-                  type="button"
-                  aria-label={
-                    showConfirmPassword ? "Hide password" : "Show password"
-                  }
-                  onClick={() =>
-                    setShowConfirmPassword((value) => !value)
-                  }
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-[#303b76]"
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff size={19} />
-                  ) : (
-                    <Eye size={19} />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {error && (
-              <div
-                role="alert"
-                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-              >
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#303b76] px-5 py-4 text-sm font-semibold text-white transition hover:bg-[#252e60] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "Creating your account..." : "Create account"}
-              {!loading && <ArrowRight size={18} />}
-            </button>
-
-            <p className="text-center text-xs leading-5 text-gray-500">
-              By creating an account, you agree to use Eventra responsibly.
-            </p>
-          </form>
-
-          <p className="mt-8 text-center text-sm text-gray-600">
+          <p className="text-sm text-[#77736E]">
             Already have an account?{" "}
             <Link
               to="/login"
-              className="font-semibold text-[#303b76] hover:underline"
+              className="font-bold text-[#E85D3F] hover:underline"
             >
               Sign in
             </Link>
           </p>
         </div>
+      </header>
 
-        <aside className="relative hidden min-h-[590px] overflow-hidden rounded-[2rem] bg-[#303b76] p-12 text-white lg:flex lg:flex-col lg:justify-between">
-          <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full border border-white/10" />
-          <div className="absolute -right-8 -top-8 h-56 w-56 rounded-full border border-white/10" />
-          <div className="absolute -bottom-24 -left-20 h-80 w-80 rounded-full bg-[#e77c68]/20 blur-3xl" />
+      {/* Main Container */}
+      <main className="flex flex-1 items-center justify-center px-5 py-10">
+        <div className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-black/[0.08] bg-white shadow-xl md:grid-cols-2">
+          {/* Left Hero Panel */}
+          <div className="relative hidden min-h-[620px] overflow-hidden bg-[#20201F] p-12 text-white md:flex md:flex-col md:justify-between">
+            <div className="absolute inset-0 bg-gradient-to-br from-[#E85D3F]/35 via-transparent to-transparent pointer-events-none" />
 
-          <div className="relative">
-            <p className="text-sm font-medium tracking-[0.2em] text-white/70">
-              EVERY EVENT. ONE PLATFORM.
-            </p>
+            <div className="relative">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-widest text-[#FFC6B6]">
+                Join Our Community
+              </span>
 
-            <h2 className="mt-8 max-w-md text-4xl font-bold leading-tight">
-              Good things happen when people come together.
-            </h2>
+              <h1 className="mt-8 text-4xl font-black leading-tight lg:text-5xl">
+                Make room
+                <br />
+                for great
+                <br />
+                <span className="font-editorial italic text-[#E85D3F]">
+                  experiences.
+                </span>
+              </h1>
 
-            <p className="mt-5 max-w-sm leading-7 text-white/70">
-              From discovering your next favourite event to keeping track of
-              every registration, your plans have a home here.
-            </p>
+              <p className="mt-6 max-w-sm text-sm leading-relaxed text-white/70">
+                Discover events that spark your curiosity, manage registrations in one place,
+                or launch your own gathering with custom sign-up flows.
+              </p>
+            </div>
+
+            <div className="relative border-t border-white/15 pt-6 text-xs text-white/60">
+              <p className="font-semibold text-white/80">One account. Endless possibilities.</p>
+              <p className="mt-1">Join attendees and organizers across the country.</p>
+            </div>
           </div>
 
-          <div className="relative rounded-2xl border border-white/15 bg-white/10 p-6 backdrop-blur-sm">
-            <p className="text-lg font-semibold">
-              One account. A world of experiences.
-            </p>
-            <p className="mt-2 text-sm leading-6 text-white/70">
-              Join Eventra and make your next event easier to find and manage.
-            </p>
+          {/* Right Form Panel */}
+          <div className="flex items-center justify-center p-8 sm:p-12">
+            <div className="w-full max-w-md">
+              <span className="inline-block rounded-full bg-[#E85D3F]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
+                Get Started
+              </span>
+
+              <h2 className="mt-4 text-3xl font-black tracking-tight text-[#20201F] sm:text-4xl">
+                Create account<span className="text-[#E85D3F]">.</span>
+              </h2>
+
+              <p className="mt-2 text-sm text-[#77736E]">
+                Fill out the details below to set up your Eventra profile.
+              </p>
+
+              {error && (
+                <div
+                  role="alert"
+                  className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700"
+                >
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="mt-7 space-y-4">
+                <div>
+                  <label
+                    htmlFor="name"
+                    className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#20201F]"
+                  >
+                    Full name *
+                  </label>
+                  <input
+                    id="name"
+                    type="text"
+                    autoComplete="name"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Jane Doe"
+                    className="w-full rounded-xl border border-black/15 bg-[#FAF7F2]/50 px-4 py-3 text-sm text-[#20201F] outline-none transition placeholder:text-[#9C968F] focus:border-[#E85D3F] focus:bg-white focus:ring-4 focus:ring-[#E85D3F]/10"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#20201F]"
+                  >
+                    Email address *
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="jane@example.com"
+                    className="w-full rounded-xl border border-black/15 bg-[#FAF7F2]/50 px-4 py-3 text-sm text-[#20201F] outline-none transition placeholder:text-[#9C968F] focus:border-[#E85D3F] focus:bg-white focus:ring-4 focus:ring-[#E85D3F]/10"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="password"
+                    className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#20201F]"
+                  >
+                    Password (min. 8 characters) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Create a strong password"
+                      className="w-full rounded-xl border border-black/15 bg-[#FAF7F2]/50 px-4 py-3 pr-12 text-sm text-[#20201F] outline-none transition placeholder:text-[#9C968F] focus:border-[#E85D3F] focus:bg-white focus:ring-4 focus:ring-[#E85D3F]/10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#77736E] hover:text-[#20201F] transition"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="confirmPassword"
+                    className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#20201F]"
+                  >
+                    Confirm password *
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Repeat your password"
+                      className="w-full rounded-xl border border-black/15 bg-[#FAF7F2]/50 px-4 py-3 pr-12 text-sm text-[#20201F] outline-none transition placeholder:text-[#9C968F] focus:border-[#E85D3F] focus:bg-white focus:ring-4 focus:ring-[#E85D3F]/10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#77736E] hover:text-[#20201F] transition"
+                    >
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#E85D3F] px-5 py-4 text-sm font-bold text-white shadow-md shadow-[#E85D3F]/20 transition hover:bg-[#20201F] hover:shadow-none disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {loading ? "Creating your account..." : "Create Account"}
+                  {!loading && <ArrowRight size={17} />}
+                </button>
+              </form>
+
+              <p className="mt-8 text-center text-sm text-[#77736E]">
+                Already registered?{" "}
+                <Link
+                  to="/login"
+                  className="font-bold text-[#E85D3F] hover:underline"
+                >
+                  Sign in here
+                </Link>
+              </p>
+            </div>
           </div>
-        </aside>
-      </section>
-    </main>
+        </div>
+      </main>
+
+      <footer className="py-6 text-center text-xs text-[#77736E] border-t border-black/10">
+        © {new Date().getFullYear()} Eventra. Experiences that bring us together.
+      </footer>
+    </div>
   );
 }

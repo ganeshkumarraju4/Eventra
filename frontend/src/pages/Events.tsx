@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
-  ArrowLeft,
-  ArrowRight,
   CalendarDays,
   Clock3,
   MapPin,
   Search,
   Users,
+  ArrowRight,
+  Sparkles,
+  PlusCircle,
+  X,
 } from "lucide-react";
 import api from "../api/axios";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
 
 type EventCategory =
+  | "ALL"
   | "CONFERENCE"
   | "WORKSHOP"
   | "SEMINAR"
@@ -24,7 +29,7 @@ interface EventItem {
   id: string;
   title: string;
   description: string;
-  category: EventCategory;
+  category: string;
   type: "PUBLIC" | "PRIVATE";
   startTime: string;
   endTime: string;
@@ -38,35 +43,29 @@ interface EventItem {
   };
 }
 
-
-function formatCategory(category: string) {
-  return category.charAt(0) + category.slice(1).toLowerCase();
-}
-
-function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function formatTime(dateString: string) {
-  return new Date(dateString).toLocaleTimeString("en-IN", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 export default function Events() {
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [events, setEvents] = useState<EventItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCategory, setSelectedCategory] =
-     useState<string>("ALL");
+  const [searchTerm, setSearchTerm] = useState(
+    searchParams.get("search") || ""
+  );
+  const [selectedCategory, setSelectedCategory] = useState<EventCategory>(
+    (searchParams.get("category") as EventCategory) || "ALL"
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const categories: { label: string; value: EventCategory }[] = [
+    { label: "All Experiences", value: "ALL" },
+    { label: "Workshops", value: "WORKSHOP" },
+    { label: "Conferences", value: "CONFERENCE" },
+    { label: "Technical", value: "TECHNICAL" },
+    { label: "Seminars", value: "SEMINAR" },
+    { label: "Concerts", value: "CONCERT" },
+    { label: "Sports", value: "SPORTS" },
+    { label: "Other", value: "OTHER" },
+  ];
 
   useEffect(() => {
     let active = true;
@@ -78,13 +77,7 @@ export default function Events() {
 
         const response = await api.get("/events");
         const data = response.data;
-
-        // Supports either an array response or { events: [...] }.
-        const eventList = Array.isArray(data) ? data : data.events;
-
-        if (!Array.isArray(eventList)) {
-          throw new Error("The server returned an unexpected events response.");
-        }
+        const eventList = Array.isArray(data) ? data : data.events ?? [];
 
         if (active) {
           setEvents(eventList);
@@ -95,7 +88,6 @@ export default function Events() {
             err instanceof Error
               ? err.message
               : "Unable to load events. Please try again.";
-
           setError(message);
         }
       } finally {
@@ -112,161 +104,184 @@ export default function Events() {
     };
   }, []);
 
+  // Sync category changes with query param
+  const handleCategorySelect = (category: EventCategory) => {
+    setSelectedCategory(category);
+    const newParams = new URLSearchParams(searchParams);
+    if (category === "ALL") {
+      newParams.delete("category");
+    } else {
+      newParams.set("category", category);
+    }
+    setSearchParams(newParams);
+  };
+
+  const handleSearchChange = (term: string) => {
+    setSearchTerm(term);
+    const newParams = new URLSearchParams(searchParams);
+    if (term.trim()) {
+      newParams.set("search", term.trim());
+    } else {
+      newParams.delete("search");
+    }
+    setSearchParams(newParams);
+  };
+
   const filteredEvents = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
     return events.filter((event) => {
       const matchesSearch =
+        !query ||
         event.title.toLowerCase().includes(query) ||
         event.description.toLowerCase().includes(query) ||
-        event.venue?.name.toLowerCase().includes(query) ||
-        event.venue?.location.toLowerCase().includes(query);
+        event.venue?.name?.toLowerCase().includes(query) ||
+        event.venue?.location?.toLowerCase().includes(query);
 
       const matchesCategory =
-        selectedCategory === "ALL" ||
-        event.category === selectedCategory;
+        selectedCategory === "ALL" || event.category === selectedCategory;
 
       return matchesSearch && matchesCategory;
     });
   }, [events, searchTerm, selectedCategory]);
 
   return (
-    <div className="min-h-screen bg-[#f7f7fb] text-[#24243a]">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 transition hover:text-[#5550a5]"
-          >
-            <ArrowLeft size={18} />
-            Dashboard
-          </button>
+    <div className="min-h-screen bg-[#FAF7F2] text-[#20201F] flex flex-col justify-between">
+      <Navbar />
 
-          <div className="text-xl font-extrabold tracking-tight text-[#393477]">
-            Eventra<span className="text-[#8c83e8]">.</span>
+      <main className="flex-1 mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 sm:py-12">
+        {/* Page Header */}
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between border-b border-black/10 pb-8">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#E85D3F]/30 bg-[#E85D3F]/10 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-[#C64A30] mb-3">
+              <Sparkles size={13} />
+              Community Calendar
+            </div>
+            <h1 className="text-3xl font-black tracking-tight text-[#20201F] sm:text-4xl">
+              Explore Events
+            </h1>
+            <p className="mt-2 text-sm text-[#77736E]">
+              Discover approved gatherings, masterclasses, and conferences.
+            </p>
           </div>
 
-          <button
-            onClick={() => navigate("/create-event")}
-            className="rounded-xl bg-[#5147a5] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#403687]"
+          <Link
+            to="/create-event"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#E85D3F] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#20201F] self-start sm:self-auto"
           >
-            + Create Event
-          </button>
+            <PlusCircle size={16} />
+            <span>Host an Event</span>
+          </Link>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-14">
-    
-<section className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-  <div>
-    <h1 className="text-2xl font-bold tracking-tight text-[#24243a]">
-      Explore Events
-    </h1>
-    <p className="mt-1 text-sm text-gray-500">
-      {loading
-        ? "Loading events..."
-        : `${filteredEvents.length} ${
-            filteredEvents.length === 1 ? "event" : "events"
-          } found`}
-    </p>
-  </div>
+        {/* Filter and Search Bar */}
+        <div className="mt-8 space-y-4">
+          <div className="relative max-w-xl">
+            <Search
+              size={18}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#77736E]"
+            />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search by event title, keyword, or venue..."
+              className="w-full rounded-xl border border-black/15 bg-white py-3 pl-10 pr-10 text-sm text-[#20201F] outline-none transition placeholder:text-[#9C968F] focus:border-[#E85D3F] focus:ring-4 focus:ring-[#E85D3F]/10"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => handleSearchChange("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#77736E] hover:text-[#20201F]"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
 
-  <div className="flex flex-col gap-3 sm:flex-row">
-    <div className="relative">
-      <Search
-        size={18}
-        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-      />
-      <input
-        type="text"
-        value={searchTerm}
-        onChange={(event) => setSearchTerm(event.target.value)}
-        placeholder="Search events..."
-        aria-label="Search events"
-        className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#5147a5] sm:w-56"
-      />
-    </div>
+          {/* Category Tabs */}
+          <div className="flex flex-wrap gap-2 pt-2">
+            {categories.map((cat) => {
+              const isSelected = selectedCategory === cat.value;
+              return (
+                <button
+                  key={cat.value}
+                  onClick={() => handleCategorySelect(cat.value)}
+                  className={`rounded-full px-4 py-2 text-xs font-bold transition ${
+                    isSelected
+                      ? "bg-[#20201F] text-white shadow-sm"
+                      : "border border-black/10 bg-white text-[#77736E] hover:border-[#E85D3F] hover:text-[#E85D3F]"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-    <select
-      value={selectedCategory}
-      onChange={(event) =>
-        setSelectedCategory(
-          event.target.value 
-        )
-      }
-      aria-label="Filter by event category"
-      className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#5147a5]"
-    >
-      <option value="ALL">All Categories</option>
-      <option value="CONFERENCE">Conference</option>
-      <option value="WORKSHOP">Workshop</option>
-      <option value="SEMINAR">Seminar</option>
-      <option value="CONCERT">Concert</option>
-      <option value="SPORTS">Sports</option>
-      <option value="TECHNICAL">Technical</option>
-      <option value="OTHER">Other</option>
-    </select>
-  </div>
-</section>
+        {/* Results Counter */}
+        <div className="mt-8 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-[#77736E]">
+          <span>
+            {loading
+              ? "Loading..."
+              : `${filteredEvents.length} ${
+                  filteredEvents.length === 1 ? "event" : "events"
+                } found`}
+          </span>
 
+          {(searchTerm || selectedCategory !== "ALL") && (
+            <button
+              onClick={() => {
+                handleSearchChange("");
+                handleCategorySelect("ALL");
+              }}
+              className="text-[#E85D3F] hover:underline cursor-pointer"
+            >
+              Reset filters
+            </button>
+          )}
+        </div>
 
-
+        {/* Content Section */}
         {loading ? (
           <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, index) => (
+            {[1, 2, 3, 4, 5, 6].map((n) => (
               <div
-                key={index}
-                className="animate-pulse overflow-hidden rounded-2xl border border-gray-100 bg-white p-6"
-              >
-                <div className="h-5 w-24 rounded bg-gray-200" />
-                <div className="mt-5 h-6 w-3/4 rounded bg-gray-200" />
-                <div className="mt-3 h-4 w-full rounded bg-gray-100" />
-                <div className="mt-2 h-4 w-2/3 rounded bg-gray-100" />
-                <div className="mt-7 h-4 w-1/2 rounded bg-gray-200" />
-                <div className="mt-5 h-10 rounded-xl bg-gray-200" />
-              </div>
+                key={n}
+                className="h-72 rounded-2xl border border-black/[0.08] bg-white p-6 animate-pulse"
+              />
             ))}
           </div>
         ) : error ? (
-          <div className="mt-8 rounded-2xl border border-red-100 bg-white px-6 py-12 text-center">
-            <p className="font-semibold text-red-600">
-              Couldn't load events
-            </p>
-            <p className="mt-2 text-sm text-gray-500">{error}</p>
+          <div className="mt-8 rounded-2xl border border-red-200 bg-white p-10 text-center max-w-lg mx-auto shadow-sm">
+            <p className="font-bold text-red-700">{error}</p>
             <button
               onClick={() => window.location.reload()}
-              className="mt-5 rounded-xl bg-[#5147a5] px-5 py-3 text-sm font-semibold text-white hover:bg-[#403687]"
+              className="mt-5 rounded-xl bg-[#20201F] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#E85D3F] transition"
             >
               Try again
             </button>
           </div>
         ) : filteredEvents.length === 0 ? (
-          <div className="mt-8 rounded-2xl border border-gray-100 bg-white px-6 py-16 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#f0effb] text-[#5147a5]">
-              <CalendarDays size={30} />
-            </div>
-
-            <h3 className="mt-5 text-xl font-bold">
-              {events.length === 0
-                ? "No public events yet"
-                : "No matching events"}
+          <div className="mt-8 rounded-2xl border border-dashed border-black/15 bg-white p-14 text-center">
+            <CalendarDays size={42} className="mx-auto text-[#77736E]" />
+            <h3 className="mt-4 text-lg font-bold text-[#20201F]">
+              No events found
             </h3>
-
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500">
+            <p className="mt-1 text-sm text-[#77736E] max-w-md mx-auto">
               {events.length === 0
-                ? "New events will appear here once they have been approved by an administrator."
-                : "Try another search term or choose a different category."}
+                ? "No approved events have been published yet. Be the first to host one!"
+                : "No events match your search criteria. Try a different keyword or category."}
             </p>
-
             {events.length > 0 && (
               <button
                 onClick={() => {
-                  setSearchTerm("");
-                  setSelectedCategory("ALL");
+                  handleSearchChange("");
+                  handleCategorySelect("ALL");
                 }}
-                className="mt-5 font-semibold text-[#5147a5] hover:underline"
+                className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-[#FAF7F2] px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[#20201F] border border-black/10 hover:bg-[#E85D3F] hover:text-white transition"
               >
-                Clear filters
+                Clear all filters
               </button>
             )}
           </div>
@@ -275,100 +290,84 @@ export default function Events() {
             {filteredEvents.map((event) => (
               <article
                 key={event.id}
-                className="group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
+                className="group flex flex-col justify-between rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
               >
-             
-            <div className="group/image relative h-44 overflow-hidden bg-[#eeecfa]">
-            <img
-                src={`/events/${event.category.toLowerCase()}.jpg`}
-                alt={`${event.category.toLowerCase()} event`}
-               className="h-full w-full object-cover transition-transform duration-500 group-hover/image:scale-105"
-                onError={(e) => {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = "/events/other.jpg";
-                }}
-            />
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rounded-full bg-[#E85D3F]/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
+                      {event.category}
+                    </span>
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10" />
+                    <span className="rounded-full border border-black/10 bg-[#FAF7F2] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#77736E]">
+                      {event.type}
+                    </span>
+                  </div>
 
-            <span className="absolute bottom-3 left-4 rounded-full bg-white/95 px-3 py-1.5 text-xs font-bold text-[#5147a5] shadow-sm">
-                {formatCategory(event.category)}
-            </span>
+                  <h2 className="mt-4 text-xl font-bold leading-snug text-[#20201F] group-hover:text-[#E85D3F] transition">
+                    <Link to={`/events/${event.id}`}>{event.title}</Link>
+                  </h2>
 
-            <span className="absolute right-3 top-3 rounded-full bg-black/35 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
-                {event.type === "PUBLIC" ? "Public event" : "Private"}
-            </span>
-            </div>
-
-
-                <div className="flex flex-1 flex-col p-6">
-                  
-                 <h3 className="text-xl font-bold leading-snug transition group-hover:text-[#5147a5]">
-                    {event.title}
-                  </h3>
-
-                  <p className="mt-3 line-clamp-3 flex-1 text-sm leading-6 text-gray-500">
+                  <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-[#77736E]">
                     {event.description}
                   </p>
+                </div>
 
-                  <div className="mt-6 space-y-3 border-t border-gray-100 pt-5">
-                    <div className="flex items-start gap-3 text-sm text-gray-600">
-                      <CalendarDays
-                        size={17}
-                        className="mt-0.5 shrink-0 text-[#7770d8]"
-                      />
-                      <span>{formatDate(event.startTime)}</span>
+                <div className="mt-6 border-t border-black/10 pt-4">
+                  <div className="space-y-2 text-xs text-[#77736E] mb-5">
+                    <div className="flex items-center gap-2 font-semibold text-[#20201F]">
+                      <CalendarDays size={15} className="text-[#E85D3F]" />
+                      <span>
+                        {new Date(event.startTime).toLocaleDateString("en-IN", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
                     </div>
 
-                    <div className="flex items-start gap-3 text-sm text-gray-600">
-                      <Clock3
-                        size={17}
-                        className="mt-0.5 shrink-0 text-[#7770d8]"
-                      />
+                    <div className="flex items-center gap-2">
+                      <Clock3 size={15} className="text-[#77736E]" />
                       <span>
-                        {formatTime(event.startTime)} –{" "}
-                        {formatTime(event.endTime)}
+                        {new Date(event.startTime).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}{" "}
+                        –{" "}
+                        {new Date(event.endTime).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
                     </div>
 
                     {event.venue && (
-                      <div className="flex items-start gap-3 text-sm text-gray-600">
-                        <MapPin
-                          size={17}
-                          className="mt-0.5 shrink-0 text-[#7770d8]"
-                        />
-                        <div>
-                          <p className="font-semibold text-gray-700">
+                      <div className="flex items-start gap-2">
+                        <MapPin size={15} className="mt-0.5 shrink-0 text-[#77736E]" />
+                        <span className="truncate">
+                          <strong className="text-[#20201F] font-semibold">
                             {event.venue.name}
-                          </p>
-                          <p className="mt-0.5 text-xs text-gray-400">
-                            {event.venue.location}
-                          </p>
-                        </div>
+                          </strong>{" "}
+                          · {event.venue.location}
+                        </span>
                       </div>
                     )}
 
-                    {event.maxParticipants !== null &&
-                      event.maxParticipants !== undefined && (
-                        <div className="flex items-center gap-3 text-sm text-gray-600">
-                          <Users
-                            size={17}
-                            className="shrink-0 text-[#7770d8]"
-                          />
-                          <span>
-                            Up to {event.maxParticipants} participants
-                          </span>
-                        </div>
-                      )}
+                    {event.maxParticipants !== null && (
+                      <div className="flex items-center gap-2">
+                        <Users size={15} className="text-[#77736E]" />
+                        <span>Up to {event.maxParticipants} attendees</span>
+                      </div>
+                    )}
                   </div>
 
-                  <button
-                    onClick={() => navigate(`/events/${event.id}`)}
-                    className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#f0effb] px-4 py-3 font-semibold text-[#5147a5] transition hover:bg-[#5147a5] hover:text-white"
+                  <Link
+                    to={`/events/${event.id}`}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#FAF7F2] py-3 text-xs font-bold uppercase tracking-wider text-[#20201F] transition hover:bg-[#E85D3F] hover:text-white"
                   >
                     View Details
-                    <ArrowRight size={17} />
-                  </button>
+                    <ArrowRight size={14} />
+                  </Link>
                 </div>
               </article>
             ))}
@@ -376,16 +375,7 @@ export default function Events() {
         )}
       </main>
 
-      <footer className="mt-12 border-t border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-5 py-6 text-sm text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <p>
-            <span className="font-bold text-[#5147a5]">Eventra.</span> Make
-            every gathering count.
-          </p>
-          <p>Discover. Connect. Experience.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
-

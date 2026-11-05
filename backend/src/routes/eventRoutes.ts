@@ -4,6 +4,7 @@ import {
     approveEvent,
     rejectEvent,
     getApprovedEvents,
+    getAdminEvents,
     getEvent,
     updateEvent,
     cancelEvent,
@@ -13,51 +14,25 @@ import {
     createEventChangeRequest, getMyEventChangeRequests
 } from "../controllers/eventChangeRequestController";
 import {
-    getPendingEventChangeRequests,approveEventChangeRequest,
+    getPendingEventChangeRequests, approveEventChangeRequest,
     rejectEventChangeRequest
 } from "../controllers/adminEventChangeRequestController";
-import { authMiddleware } from "../middleware/authMiddleware";
+import { authMiddleware, optionalAuthMiddleware } from "../middleware/authMiddleware";
 import { adminMiddleware } from "../middleware/adminMiddleware";
 
 
 const router = Router();
 
+// ── Public routes (no auth) ────────────────────────────────────────────────
+// Must be declared BEFORE /:eventId so Express doesn't treat "/" as a param.
+router.get("/", getApprovedEvents);
+
+// ── Fixed-path authenticated routes ───────────────────────────────────────
 router.post("/", authMiddleware, createEvent);
 router.get("/my", authMiddleware, getMyEvents);
-router.get(
-    "/:eventId",
-    authMiddleware,
-    getEvent
-);
+router.get("/admin", authMiddleware, adminMiddleware, getAdminEvents);
 
-router.patch(
-    "/:eventId/approve",
-    authMiddleware,
-    adminMiddleware,
-    approveEvent
-);
-
-router.patch(
-    "/:eventId/reject",
-    authMiddleware,
-    adminMiddleware,
-    rejectEvent
-);
-router.patch(
-    "/:eventId",
-    authMiddleware,
-    updateEvent
-);
-router.patch(
-    "/:eventId/cancel",
-    authMiddleware,
-    cancelEvent
-);
-router.post(
-    "/:eventId/change-requests",
-    authMiddleware,
-    createEventChangeRequest
-);
+// Admin change-request routes — also fixed paths, must precede /:eventId
 router.get(
     "/admin/change-requests",
     authMiddleware,
@@ -76,11 +51,44 @@ router.patch(
     adminMiddleware,
     rejectEventChangeRequest
 );
+
+// ── Dynamic /:eventId routes — must come AFTER all fixed-path routes ───────
+router.get(
+    "/:eventId",
+    optionalAuthMiddleware,
+    getEvent
+);
+router.patch(
+    "/:eventId/approve",
+    authMiddleware,
+    adminMiddleware,
+    approveEvent
+);
+router.patch(
+    "/:eventId/reject",
+    authMiddleware,
+    adminMiddleware,
+    rejectEvent
+);
+router.patch(
+    "/:eventId/cancel",
+    authMiddleware,
+    cancelEvent
+);
+router.patch(
+    "/:eventId",
+    authMiddleware,
+    updateEvent
+);
+router.post(
+    "/:eventId/change-requests",
+    authMiddleware,
+    createEventChangeRequest
+);
 router.get(
     "/:eventId/change-requests",
     authMiddleware,
     getMyEventChangeRequests
 );
-router.get("/", authMiddleware, getApprovedEvents);
 
 export default router;

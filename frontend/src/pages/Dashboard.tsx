@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   CalendarDays,
-  Compass,
   Ticket,
-  UserRound,
-  LogOut,
   ArrowRight,
   MapPin,
   Clock3,
   RefreshCw,
+  PlusCircle,
+  Layers,
+  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 import api from "../api/axios";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
+import { useAuth } from "../context/AuthContext";
 
 interface User {
   id: string;
@@ -47,444 +51,403 @@ interface EventItem {
 interface Registration {
   id: string;
   status: string;
+  createdAt?: string;
   event?: EventItem;
-}
-
-async function fetchDashboardData() {
-  const [userResponse, eventsResponse, registrationsResponse] =
-    await Promise.all([
-      api.get("/auth/me"),
-      api.get("/events"),
-      api.get("/registrations/my"),
-    ]);
-
-  return {
-    user: userResponse.data.user,
-
-    events: Array.isArray(eventsResponse.data)
-      ? eventsResponse.data
-      : eventsResponse.data.events ?? [],
-
-    registrations: Array.isArray(registrationsResponse.data)
-      ? registrationsResponse.data
-      : registrationsResponse.data.registrations ?? [],
-  };
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user: authUser, logout } = useAuth();
 
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(authUser);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
- async function loadDashboard() {
-  try {
-    const data = await fetchDashboardData();
+  async function loadDashboard() {
+    try {
+      setLoading(true);
+      setError("");
 
-    setUser(data.user);
-    setEvents(data.events);
-    setRegistrations(data.registrations);
-    setError("");
-  } catch (err) {
-    console.error("Dashboard loading error:", err);
+      const [userResponse, eventsResponse, registrationsResponse] =
+        await Promise.all([
+          api.get("/auth/me"),
+          api.get("/events"),
+          api.get("/registrations/my"),
+        ]);
 
-    const status = (
-      err as { response?: { status?: number } }
-    )?.response?.status;
+      setUser(userResponse.data.user);
 
-    if (status === 401 || status === 403) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      navigate("/login", { replace: true });
-      return;
+      const eventList = Array.isArray(eventsResponse.data)
+        ? eventsResponse.data
+        : eventsResponse.data.events ?? [];
+      setEvents(eventList);
+
+      const regList = Array.isArray(registrationsResponse.data)
+        ? registrationsResponse.data
+        : registrationsResponse.data.registrations ?? [];
+      setRegistrations(regList);
+    } catch (err: unknown) {
+      console.error("Dashboard loading error:", err);
+      const status = (err as { response?: { status?: number } })?.response?.status;
+
+      if (status === 401 || status === 403) {
+        logout();
+        navigate("/login", { replace: true });
+        return;
+      }
+      setError("Unable to load dashboard data. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    setError("We couldn't load your dashboard. Please try again.");
-  } finally {
-    setLoading(false);
   }
-}
+
   useEffect(() => {
   if (!localStorage.getItem("token")) {
     navigate("/login", { replace: true });
     return;
   }
 
-  async function initializeDashboard() {
-    try {
-      const data = await fetchDashboardData();
+  const timer = setTimeout(() => {
+    void loadDashboard();
+  }, 0);
 
-      setUser(data.user);
-      setEvents(data.events);
-      setRegistrations(data.registrations);
-    } catch (err) {
-      console.error("Dashboard loading error:", err);
-
-      const status = (
-        err as { response?: { status?: number } }
-      )?.response?.status;
-
-      if (status === 401 || status === 403) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        navigate("/login", { replace: true });
-        return;
-      }
-
-      setError("We couldn't load your dashboard. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  void initializeDashboard();
+  return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
-  function handleLogout() {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/login", { replace: true });
-  }
 
   const firstName = user?.name?.trim().split(/\s+/)[0] || "there";
-
   const approvedRegistrations = registrations.filter(
-    (registration) => registration.status === "APPROVED"
+    (reg) => reg.status === "APPROVED"
   ).length;
 
   return (
-    <div className="min-h-screen bg-[#faf8f4] text-[#20253b]">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-gray-200 bg-white px-5 py-7 md:flex">
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-3 px-3 text-left"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#303b76] text-white">
-            <CalendarDays size={21} />
-          </span>
-          <span className="text-xl font-bold">Eventra</span>
-        </button>
+    <div className="min-h-screen bg-[#FAF7F2] text-[#20201F] flex flex-col justify-between">
+      <Navbar />
 
-        <p className="mb-3 mt-12 px-3 text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-          Workspace
-        </p>
-
-        <nav className="space-y-2">
-          <button className="flex w-full items-center gap-3 rounded-xl bg-[#303b76] px-4 py-3 text-sm font-semibold text-white">
-            <Compass size={19} />
-            Overview
-          </button>
-
-          <button
-            onClick={() => navigate("/events")}
-            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
-          >
-            <CalendarDays size={19} />
-            Explore events
-          </button>
-          <button
-  onClick={() => navigate("/my-events")}
-  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
->
-  <CalendarDays size={19} />
-  My Events
-</button>
-          <button
-            onClick={() => navigate("/create-event")}
-            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
-
-            >
-
-              <CalendarDays size={19} />
-              Create event
-            </button>
-
-          <button
-            onClick={() => navigate("/my-registrations")}
-            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
-          >
-            <Ticket size={19} />
-            My registrations
-          </button>
-
-          <button
-            onClick={() => navigate("/profile")}
-            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
-          >
-            <UserRound size={19} />
-            My profile
-          </button>
-        </nav>
-
-        <div className="mt-auto border-t border-gray-100 pt-5">
-          <div className="mb-4 rounded-xl bg-[#f5f4fb] p-4">
-            <p className="text-sm font-semibold">
-              Every event. One platform.
-            </p>
-            <p className="mt-1 text-xs leading-5 text-gray-500">
-              Your next great experience starts here.
+      <main className="flex-1 mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 sm:py-12">
+        {loading ? (
+          <div className="flex min-h-[50vh] flex-col items-center justify-center">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#E85D3F]/20 border-t-[#E85D3F]" />
+            <p className="mt-4 text-sm font-semibold text-[#77736E]">
+              Loading your workspace...
             </p>
           </div>
-
-          <button
-            onClick={handleLogout}
-            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-gray-600 transition hover:bg-red-50 hover:text-red-600"
-          >
-            <LogOut size={19} />
-            Log out
-          </button>
-        </div>
-      </aside>
-
-      <main className="min-h-screen md:ml-64">
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-[#faf8f4]/95 px-5 py-4 backdrop-blur sm:px-8 lg:px-10">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-gray-400">
-              Eventra / Dashboard
-            </p>
-            <h1 className="mt-1 text-lg font-bold sm:text-xl">
-              Your workspace
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold">
-                {user?.name || "Loading..."}
-              </p>
-              <p className="text-xs text-gray-500">
-                {user?.role || "Member"}
-              </p>
-            </div>
-
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e9e8f6] font-bold text-[#303b76]">
-              {user?.name?.trim().charAt(0).toUpperCase() || "U"}
-            </div>
-
+        ) : error ? (
+          <div className="rounded-2xl border border-red-200 bg-white p-8 text-center max-w-xl mx-auto shadow-sm">
+            <p className="font-bold text-red-700">{error}</p>
             <button
-              onClick={handleLogout}
-              title="Log out"
-              className="rounded-lg p-2 text-gray-500 transition hover:bg-red-50 hover:text-red-600 md:hidden"
+              onClick={() => void loadDashboard()}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#20201F] px-5 py-3 text-sm font-bold text-white hover:bg-[#E85D3F] transition"
             >
-              <LogOut size={19} />
+              <RefreshCw size={16} />
+              Try again
             </button>
           </div>
-        </header>
+        ) : (
+          <div className="space-y-10">
+            {/* Welcome Banner */}
+            <section className="relative overflow-hidden rounded-[2.5rem] bg-[#20201F] p-8 sm:p-12 text-white shadow-xl">
+              <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-[#E85D3F]/25 blur-3xl pointer-events-none" />
+              <div className="absolute right-12 bottom-0 hidden lg:block opacity-15 pointer-events-none">
+                <Sparkles size={220} />
+              </div>
 
-        <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10 lg:px-10">
-          {loading ? (
-            <div className="flex min-h-80 flex-col items-center justify-center">
-              <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#303b76]/20 border-t-[#303b76]" />
-              <p className="mt-4 text-sm text-gray-500">
-                Preparing your dashboard...
-              </p>
-            </div>
-          ) : error ? (
-            <div className="rounded-2xl border border-red-200 bg-white p-8 text-center">
-              <p className="font-semibold text-red-700">{error}</p>
-                 <button
-                onClick={() => {
-                    setLoading(true);
-                    setError("");
-                    void loadDashboard();
-                }}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#303b76] px-5 py-3 text-sm font-semibold text-white hover:bg-[#252e60]"
-                >
-                <RefreshCw size={16} />
-                Try again
-                </button>
-            </div>
-          ) : (
-            <>
-              <section className="relative overflow-hidden rounded-[1.75rem] bg-[#303b76] p-7 text-white sm:p-10">
-                <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border border-white/10" />
-                <div className="absolute -bottom-24 right-24 h-56 w-56 rounded-full bg-[#e77c68]/20 blur-3xl" />
+              <div className="relative max-w-2xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1 text-xs font-bold uppercase tracking-widest text-[#FFC6B6]">
+                  <Sparkles size={13} />
+                  Attendee & Organizer Workspace
+                </div>
 
-                <div className="relative max-w-2xl">
-                  <p className="text-sm font-medium tracking-wide text-white/70">
-                    YOUR EVENT JOURNEY STARTS HERE
-                  </p>
+                <h1 className="mt-5 text-3xl font-black leading-tight sm:text-4xl md:text-5xl">
+                  Welcome back,{" "}
+                  <span className="font-editorial italic text-[#E85D3F]">
+                    {firstName}!
+                  </span>
+                </h1>
 
-                  <h2 className="mt-4 text-3xl font-bold leading-tight sm:text-4xl">
-                    Welcome back, {firstName}!
-                  </h2>
+                <p className="mt-4 text-sm leading-relaxed text-white/70 sm:text-base">
+                  Discover what's happening around you, reserve your spot, or
+                  coordinate your own community events with ease.
+                </p>
 
-                  <p className="mt-4 max-w-xl text-sm leading-7 text-white/75 sm:text-base">
-                    Discover what's happening, find experiences worth
-                    remembering, and keep your registrations organized.
-                  </p>
-
-                  <button
-                    onClick={() => navigate("/events")}
-                    className="mt-7 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3.5 text-sm font-semibold text-[#303b76] transition hover:bg-[#f0effb]"
+                <div className="mt-8 flex flex-wrap gap-4">
+                  <Link
+                    to="/events"
+                    className="inline-flex items-center gap-2 rounded-full bg-[#E85D3F] px-6 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-white hover:text-[#20201F]"
                   >
-                    Explore events
-                    <ArrowRight size={17} />
-                  </button>
-                  
-                </div>
-              </section>
+                    Explore all events
+                    <ArrowRight size={16} />
+                  </Link>
 
-              <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                <div className="rounded-2xl border border-gray-200/80 bg-white p-6">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-500">
-                      Available events
-                    </span>
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eeeef8] text-[#303b76]">
-                      <CalendarDays size={21} />
-                    </span>
+                  <Link
+                    to="/create-event"
+                    className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-6 py-3.5 text-sm font-bold text-white transition hover:bg-white hover:text-[#20201F]"
+                  >
+                    <PlusCircle size={16} />
+                    Host a new event
+                  </Link>                </div>
+              </div>
+            </section>
+
+            {/* Quick Metrics */}
+            <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm transition hover:shadow-md">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#77736E]">
+                    Available Events
+                  </span>
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FAF7F2] text-[#E85D3F]">
+                    <CalendarDays size={20} />
+                  </span>
+                </div>
+                <p className="mt-4 text-3xl font-black text-[#20201F]">
+                  {events.length}
+                </p>
+                <div className="mt-3 flex items-center justify-between border-t border-black/5 pt-3">
+                  <span className="text-xs text-[#77736E]">
+                    Live events to attend
+                  </span>
+                  <Link
+                    to="/events"
+                    className="text-xs font-bold text-[#E85D3F] hover:underline"
+                  >
+                    Browse ↗
+                  </Link>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm transition hover:shadow-md">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#77736E]">
+                    My Registrations
+                  </span>
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#FBE6DF] text-[#E85D3F]">
+                    <Ticket size={20} />
+                  </span>
+                </div>
+                <p className="mt-4 text-3xl font-black text-[#20201F]">
+                  {registrations.length}
+                </p>
+                <div className="mt-3 flex items-center justify-between border-t border-black/5 pt-3">
+                  <span className="text-xs text-[#77736E]">
+                    Events you registered for
+                  </span>
+                  <Link
+                    to="/my-registrations"
+                    className="text-xs font-bold text-[#E85D3F] hover:underline"
+                  >
+                    View tickets ↗
+                  </Link>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm transition hover:shadow-md sm:col-span-2 lg:col-span-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#77736E]">
+                    Confirmed Status
+                  </span>
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#EBF5E8] text-[#266B22]">
+                    <CheckCircle2 size={20} />
+                  </span>
+                </div>
+                <p className="mt-4 text-3xl font-black text-[#20201F]">
+                  {approvedRegistrations}
+                </p>
+                <div className="mt-3 flex items-center justify-between border-t border-black/5 pt-3">
+                  <span className="text-xs text-[#77736E]">
+                    Approved & ready to attend
+                  </span>
+                  <span className="text-xs font-semibold text-[#266B22]">
+                    Confirmed
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            {/* Quick Actions Shortcuts */}
+            <section className="grid gap-4 sm:grid-cols-3">
+              <Link
+                to="/create-event"
+                className="group flex items-center justify-between rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm transition hover:border-[#E85D3F] hover:shadow-md"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E85D3F]/10 text-[#E85D3F]">
+                    <PlusCircle size={20} />
                   </div>
-                  <p className="mt-5 text-3xl font-bold">{events.length}</p>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Approved events to explore
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-gray-200/80 bg-white p-6">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-500">
-                      My registrations
-                    </span>
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#fff0eb] text-[#d96d59]">
-                      <Ticket size={21} />
-                    </span>
-                  </div>
-                  <p className="mt-5 text-3xl font-bold">
-                    {registrations.length}
-                  </p>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Total registrations
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-gray-200/80 bg-white p-6 sm:col-span-2 xl:col-span-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-500">
-                      Approved registrations
-                    </span>
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e9f7ef] text-[#28764b]">
-                      <Ticket size={21} />
-                    </span>
-                  </div>
-                  <p className="mt-5 text-3xl font-bold">
-                    {approvedRegistrations}
-                  </p>
-                  <p className="mt-2 text-sm text-gray-500">
-                    You're confirmed to attend
-                  </p>
-                </div>
-              </section>
-
-              <section className="mt-12">
-                <div className="flex items-end justify-between gap-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#d96d59]">
-                      FIND YOUR NEXT EXPERIENCE
-                    </p>
-                    <h2 className="mt-2 text-2xl font-bold">
-                      Explore events
-                    </h2>
-                    <p className="mt-2 text-sm text-gray-500">
-                      Discover approved events from your community.
+                    <h3 className="text-sm font-bold text-[#20201F] group-hover:text-[#E85D3F] transition">
+                      Host an Event
+                    </h3>
+                    <p className="text-xs text-[#77736E]">
+                      Submit a new gathering
                     </p>
                   </div>
+                </div>
+                <ArrowRight
+                  size={16}
+                  className="text-[#77736E] group-hover:text-[#E85D3F] group-hover:translate-x-1 transition"
+                />
+              </Link>
 
-                  <button
-                    onClick={() => navigate("/events")}
-                    className="hidden items-center gap-1 text-sm font-semibold text-[#303b76] hover:underline sm:flex"
-                  >
-                    View all <ArrowRight size={16} />
-                  </button>
+              <Link
+                to="/my-events"
+                className="group flex items-center justify-between rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm transition hover:border-[#E85D3F] hover:shadow-md"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FAF7F2] text-[#20201F]">
+                    <Layers size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#20201F] group-hover:text-[#E85D3F] transition">
+                      Manage My Events
+                    </h3>
+                    <p className="text-xs text-[#77736E]">
+                      Attendee lists & forms
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight
+                  size={16}
+                  className="text-[#77736E] group-hover:text-[#E85D3F] group-hover:translate-x-1 transition"
+                />
+              </Link>
+
+              <Link
+                to="/my-registrations"
+                className="group flex items-center justify-between rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm transition hover:border-[#E85D3F] hover:shadow-md"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FAF7F2] text-[#20201F]">
+                    <Ticket size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#20201F] group-hover:text-[#E85D3F] transition">
+                      My Registrations
+                    </h3>
+                    <p className="text-xs text-[#77736E]">
+                      View tickets & answers
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight
+                  size={16}
+                  className="text-[#77736E] group-hover:text-[#E85D3F] group-hover:translate-x-1 transition"
+                />
+              </Link>
+            </section>
+
+            {/* Upcoming Approved Events Preview */}
+            <section>
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#E85D3F]">
+                    Discover Live Experiences
+                  </p>
+                  <h2 className="mt-2 text-2xl font-black tracking-tight text-[#20201F]">
+                    Featured Events
+                  </h2>
                 </div>
 
-                {events.length === 0 ? (
-                  <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
-                    <CalendarDays
-                      size={32}
-                      className="mx-auto text-gray-400"
-                    />
-                    <h3 className="mt-4 font-semibold">
-                      No approved events to show yet
-                    </h3>
-                    <p className="mt-2 text-sm text-gray-500">
-                      Approved events will appear here when they're available.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                    {events.slice(0, 6).map((event) => (
-                      <article
-                        key={event.id}
-                        className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white transition hover:-translate-y-1 hover:shadow-lg hover:shadow-[#303b76]/5"
-                      >
-                        <div className="flex h-36 items-center justify-center bg-gradient-to-br from-[#eeeef8] to-[#fcece7]">
-                          <CalendarDays
-                            size={42}
-                            strokeWidth={1.4}
-                            className="text-[#303b76]/65"
-                          />
-                        </div>
+                <Link
+                  to="/events"
+                  className="hidden sm:inline-flex items-center gap-1 text-sm font-bold text-[#E85D3F] hover:underline"
+                >
+                  View all ({events.length}) <ArrowRight size={16} />
+                </Link>
+              </div>
 
-                        <div className="p-5">
-                          <span className="rounded-full bg-[#eeeef8] px-3 py-1 text-xs font-semibold text-[#303b76]">
+              {events.length === 0 ? (
+                <div className="mt-6 rounded-2xl border border-dashed border-black/15 bg-white p-12 text-center">
+                  <CalendarDays size={36} className="mx-auto text-[#77736E]" />
+                  <h3 className="mt-4 font-bold text-lg">
+                    No approved events found
+                  </h3>
+                  <p className="mt-1 text-sm text-[#77736E]">
+                    Submitted events will appear here once approved by an
+                    administrator.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {events.slice(0, 6).map((event) => (
+                    <article
+                      key={event.id}
+                      className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="rounded-full bg-[#E85D3F]/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#C64A30]">
                             {event.category || "Event"}
                           </span>
 
-                          <h3 className="mt-4 text-lg font-bold">
-                            {event.title}
-                          </h3>
-
-                          <p className="mt-2 line-clamp-2 min-h-10 text-sm leading-5 text-gray-500">
-                            {event.description ||
-                              "Explore this event to learn more."}
-                          </p>
-
                           {event.startTime && (
-                            <p className="mt-4 flex items-center gap-2 text-sm text-gray-500">
-                              <Clock3 size={16} />
-                              {new Date(event.startTime).toLocaleString(
+                            <span className="flex items-center gap-1 text-xs text-[#77736E]">
+                              <Clock3 size={13} />
+                              {new Date(event.startTime).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          )}
+                        </div>
+
+                        <h3 className="mt-4 text-lg font-bold leading-snug text-[#20201F] group-hover:text-[#E85D3F] transition">
+                          {event.title}
+                        </h3>
+
+                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#77736E]">
+                          {event.description ||
+                            "Click view details to learn more about this event."}
+                        </p>
+                      </div>
+
+                      <div className="mt-6 border-t border-black/10 pt-4">
+                        <div className="space-y-1.5 text-xs text-[#77736E] mb-4">
+                          {event.startTime && (
+                            <p className="flex items-center gap-1.5 font-medium text-[#20201F]">
+                              <CalendarDays
+                                size={14}
+                                className="text-[#E85D3F]"
+                              />
+                              {new Date(event.startTime).toLocaleDateString(
                                 undefined,
                                 {
-                                  dateStyle: "medium",
-                                  timeStyle: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
                                 }
                               )}
                             </p>
                           )}
 
                           {event.venue?.name && (
-                            <p className="mt-2 flex items-center gap-2 text-sm text-gray-500">
-                              <MapPin size={16} />
+                            <p className="flex items-center gap-1.5 truncate">
+                              <MapPin size={14} />
                               {event.venue.name}
                             </p>
                           )}
-
-                          <div className="mt-5 flex flex-col gap-2">
-  <button
-    onClick={() => navigate(`/events/${event.id}`)}
-    className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#303b76]/20 px-4 py-3 text-sm font-semibold text-[#303b76] transition hover:bg-[#303b76] hover:text-white"
-  >
-    View details
-    <ArrowRight size={16} />
-  </button>
-
-</div>
                         </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </section>
 
-            </>
-          )}
-        </div>
+                        <Link
+                          to={`/events/${event.id}`}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#FAF7F2] py-2.5 text-xs font-bold uppercase tracking-wider text-[#20201F] transition hover:bg-[#E85D3F] hover:text-white"
+                        >
+                          View Details
+                          <ArrowRight size={14} />
+                        </Link>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
       </main>
+
+      <Footer />
     </div>
   );
 }
-
