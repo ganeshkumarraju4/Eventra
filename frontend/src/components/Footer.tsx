@@ -20,20 +20,6 @@ export default function Footer() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-6 text-sm font-semibold text-[#77736E]">
-            <Link to="/events" className="hover:text-[#E85D3F] transition">
-              Explore Events
-            </Link>
-            <Link to="/create-event" className="hover:text-[#E85D3F] transition">
-              Host an Event
-            </Link>
-            <Link to="/my-registrations" className="hover:text-[#E85D3F] transition">
-              My Registrations
-            </Link>
-            <Link to="/login" className="hover:text-[#E85D3F] transition">
-              Sign In
-            </Link>
-          </div>
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-black/10 pt-6 sm:flex-row text-xs text-[#77736E]">

@@ -41,6 +41,7 @@ interface EventItem {
   category: string;
   startTime: string;
   endTime: string;
+  isCompleted?: boolean;
   status: string;
   type: "PUBLIC" | "PRIVATE";
   registrationMode: "OPEN" | "APPROVAL_REQUIRED";
@@ -106,6 +107,11 @@ export default function EventRegistration() {
 
         if (fetchedEvent.type !== "PUBLIC") {
           setError("This event is not open for public registration.");
+          return;
+        }
+
+        if (fetchedEvent.isCompleted) {
+          setError("This event has ended and registration is closed.");
           return;
         }
 

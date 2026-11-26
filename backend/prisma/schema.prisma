@@ -4,8 +4,9 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
@@ -78,6 +79,7 @@ model User {
 
   events        Event[]
   registrations Registration[]
+  feedbacks     EventFeedback[]
 
   changeRequests EventChangeRequest[] @relation("ChangeRequestOrganizer")
 
@@ -121,11 +123,27 @@ model Event {
   booking            Booking?
   registrations      Registration[]
   registrationFields RegistrationField[]
+  feedbacks          EventFeedback[]
+  postEventDescription String? @db.Text
+  postEventPhotos      EventPostPhoto[]
+  coverImageUrl        String? @db.Text
+  coverImagePublicId   String? @unique
 
   changeRequests EventChangeRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model EventPostPhoto {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  eventId   String   @db.VarChar(36)
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  url       String   @db.Text
+  publicId  String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
 }
 
 model Booking {
@@ -160,6 +178,22 @@ model Registration {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, eventId])
+}
+
+model EventFeedback {
+  id      String @id @default(uuid()) @db.VarChar(36)
+  eventId String @db.VarChar(36)
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId  String @db.VarChar(36)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  rating    Int
+  comment   String?  @db.VarChar(1000)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, userId])
+  @@index([userId])
 }
 
 model RegistrationField {

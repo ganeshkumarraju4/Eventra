@@ -11,6 +11,13 @@ import {
     getMyEvents
 } from "../controllers/eventController";
 import {
+    getRecentlyCompletedEvents,
+    submitEventFeedback
+} from "../controllers/eventFeedbackController";
+import { savePostEventContent } from "../controllers/postEventContentController";
+import { uploadEventCover } from "../controllers/eventCoverController";
+import multer from "multer";
+import {
     createEventChangeRequest, getMyEventChangeRequests
 } from "../controllers/eventChangeRequestController";
 import {
@@ -22,10 +29,36 @@ import { adminMiddleware } from "../middleware/adminMiddleware";
 
 
 const router = Router();
+const uploadPostEventPhotos = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 5 * 1024 * 1024,
+        files: 8
+    },
+    fileFilter: (_req, file, callback) => {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
+            callback(new Error("Only JPEG, PNG, and WebP images are supported"));
+            return;
+        }
+        callback(null, true);
+    }
+}).array("photos", 8);
+const uploadEventCoverImage = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, callback) => {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
+            callback(new Error("Only JPEG, PNG, and WebP images are supported"));
+            return;
+        }
+        callback(null, true);
+    }
+}).single("coverImage");
 
 // ── Public routes (no auth) ────────────────────────────────────────────────
 // Must be declared BEFORE /:eventId so Express doesn't treat "/" as a param.
 router.get("/", getApprovedEvents);
+router.get("/completed", getRecentlyCompletedEvents);
 
 // ── Fixed-path authenticated routes ───────────────────────────────────────
 router.post("/", authMiddleware, createEvent);
@@ -53,6 +86,40 @@ router.patch(
 );
 
 // ── Dynamic /:eventId routes — must come AFTER all fixed-path routes ───────
+router.post("/:eventId/feedback", authMiddleware, submitEventFeedback);
+router.put("/:eventId/cover-image", authMiddleware, (req, res, next) => {
+    uploadEventCoverImage(req, res, (error) => {
+        if (error instanceof multer.MulterError) {
+            return res.status(400).json({
+                message: "Cover image must be no larger than 5 MB"
+            });
+        }
+        if (error) {
+            return res.status(400).json({ message: error.message });
+        }
+        next();
+    });
+}, uploadEventCover);
+router.post(
+    "/:eventId/post-event-content",
+    authMiddleware,
+    (req, res, next) => {
+        uploadPostEventPhotos(req, res, (error) => {
+            if (error instanceof multer.MulterError) {
+                return res.status(400).json({
+                    message: "Upload up to 8 images, each no larger than 5 MB"
+                });
+            }
+            if (error) {
+                return res.status(400).json({
+                    message: error.message
+                });
+            }
+            next();
+        });
+    },
+    savePostEventContent
+);
 router.get(
     "/:eventId",
     optionalAuthMiddleware,

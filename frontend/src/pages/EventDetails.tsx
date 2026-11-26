@@ -9,10 +9,13 @@ import {
   Sparkles,
   ShieldAlert,
   CheckCircle2,
+  Image as ImageIcon,
+  X,
 } from "lucide-react";
 import api from "../api/axios";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { resolveEventImage } from "../components/eventImageUtils";
 import { useAuth } from "../context/AuthContext";
 
 interface EventItem {
@@ -26,7 +29,11 @@ interface EventItem {
   endTime: string;
   maxParticipants: number | null;
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  isCompleted?: boolean;
   isRegistered?: boolean;
+  coverImageUrl?: string | null;
+  postEventDescription?: string | null;
+  postEventPhotos?: { id: string; url: string }[];
   venue?: {
     name: string;
     location: string;
@@ -53,6 +60,18 @@ export default function EventDetails() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedPhoto) return;
+
+    const closeOnEscape = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === "Escape") setSelectedPhoto(null);
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedPhoto]);
 
   useEffect(() => {
     let active = true;
@@ -191,6 +210,13 @@ export default function EventDetails() {
             <div className="space-y-8">
               {/* Event Header Banner Card */}
               <div className="overflow-hidden rounded-3xl border border-black/[0.08] bg-white p-6 sm:p-10 shadow-sm">
+                <div className="-mx-6 -mt-6 mb-6 h-48 overflow-hidden sm:-mx-10 sm:-mt-10 sm:h-72">
+                  <img
+                    src={resolveEventImage(event.category, event.title, event.coverImageUrl)}
+                    alt={`${event.title} cover`}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="rounded-full bg-[#E85D3F]/10 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-[#C64A30]">
                     {event.category}
@@ -251,22 +277,109 @@ export default function EventDetails() {
                     </div>
                   </div>
                 </div>
+
+                <div className="mt-7 border-t border-black/10 pt-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className={`text-xs font-bold uppercase tracking-wider ${event.isCompleted ? "text-[#77736E]" : "text-[#E85D3F]"}`}>
+                        {event.isCompleted ? "Event concluded" : "Join Event"}
+                      </p>
+                      <p className="mt-1 text-xl font-black text-[#20201F]">
+                        {event.isCompleted ? "Event Completed" : "Free Registration"}
+                      </p>
+                    </div>
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#FBE6DF] text-[#E85D3F]">
+                      {event.isCompleted ? <CalendarDays size={24} /> : <Ticket size={24} />}
+                    </div>
+                  </div>
+
+                  {!event.isCompleted && (
+                    <div className="mt-4 grid gap-2 text-xs text-[#77736E] sm:grid-cols-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 size={16} className="shrink-0 text-[#266B22]" />
+                        <span>Instant confirmation sent to your profile</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 size={16} className="shrink-0 text-[#266B22]" />
+                        <span>
+                          {event.registrationMode === "APPROVAL_REQUIRED"
+                            ? "Host will review your answers"
+                            : "Direct entry upon registration"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 size={16} className="shrink-0 text-[#266B22]" />
+                        <span>Cancel or update anytime from your dashboard</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {!event.isCompleted && (event.isRegistered ||
+                  (registrationCheck?.eventId === event.id &&
+                    registrationCheck.userId === user?.id &&
+                    registrationCheck.isRegistered) ? (
+                    <div
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-[#C7E6C0] bg-[#EBF5E8] px-5 py-3 text-sm font-bold text-[#266B22]"
+                      role="status"
+                    >
+                      <CheckCircle2 size={18} />
+                      Registered
+                    </div>
+                  ) : isAuthenticated &&
+                    (!registrationCheck ||
+                      registrationCheck.eventId !== event.id ||
+                      registrationCheck.userId !== user?.id) ? (
+                    <div
+                      className="mt-4 flex w-full items-center justify-center rounded-xl border border-black/10 bg-[#FAF7F2] px-5 py-3 text-sm font-semibold text-[#77736E]"
+                      role="status"
+                    >
+                      Checking registration...
+                    </div>
+                  ) : event.status === "APPROVED" ? (
+                    <button
+                      onClick={() => {
+                        const registrationPath = `/events/${event.id}/register`;
+                        navigate(
+                          isAuthenticated
+                            ? registrationPath
+                            : "/login",
+                          isAuthenticated
+                            ? undefined
+                            : { state: { redirectTo: registrationPath } }
+                        );
+                      }}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#E85D3F] px-5 py-3 text-sm font-bold text-white shadow-md shadow-[#E85D3F]/20 transition hover:bg-[#20201F] hover:shadow-none"
+                    >
+                      <Ticket size={18} />
+                      Register for Event
+                    </button>
+                  ) : (
+                    <div className="mt-4 rounded-xl bg-[#FEF5E7] p-4 text-center text-xs font-bold text-[#B45309]">
+                      Registration is unavailable because this event is currently {event.status.toLowerCase()}.
+                    </div>
+                  ))}
+
+                  <p className="mt-4 text-center text-[11px] text-[#77736E]">
+                    Safe & verified event hosted on Eventra.
+                  </p>
+                </div>
               </div>
 
-              {/* Event Description Section */}
-              <div className="rounded-3xl border border-black/[0.08] bg-white p-6 sm:p-10 shadow-sm">
-                <h2 className="text-xl font-bold tracking-tight text-[#20201F]">
-                  About this experience
-                </h2>
+            </div>
 
+            {/* Event description and details */}
+            <aside className="h-fit space-y-6 lg:sticky lg:top-24">
+              <section className="rounded-3xl border border-black/[0.08] bg-white p-6 shadow-sm sm:p-8">
+                <h2 className="text-xl font-bold tracking-tight text-[#20201F]">
+                  About this event
+                </h2>
                 <div className="mt-4 whitespace-pre-line text-sm leading-relaxed text-[#77736E] sm:text-base">
                   {event.description}
                 </div>
 
-                {/* Additional Venue & Capacity Info */}
-                <div className="mt-8 grid gap-4 sm:grid-cols-2 border-t border-black/10 pt-6">
+                <div className="mt-8 space-y-5 border-t border-black/10 pt-6">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FAF7F2] text-[#20201F]">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FAF7F2] text-[#20201F]">
                       <Users size={18} />
                     </div>
                     <div>
@@ -282,7 +395,7 @@ export default function EventDetails() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FAF7F2] text-[#20201F]">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FAF7F2] text-[#20201F]">
                       <Sparkles size={18} />
                     </div>
                     <div>
@@ -295,98 +408,85 @@ export default function EventDetails() {
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </section>
 
-            {/* Right Column: Sticky RSVP Action Card */}
-            <div className="h-fit lg:sticky lg:top-24 space-y-4">
-              <div className="rounded-3xl border border-black/[0.08] bg-white p-7 shadow-lg">
-                <div className="flex items-center justify-between pb-5 border-b border-black/10">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-[#E85D3F]">
-                      Join Event
-                    </p>
-                    <p className="mt-1 text-2xl font-black text-[#20201F]">
-                      Free Registration
-                    </p>
-                  </div>
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FBE6DF] text-[#E85D3F]">
-                    <Ticket size={24} />
-                  </div>
-                </div>
+              {event.isCompleted &&
+                (event.postEventDescription || event.postEventPhotos?.length) && (
+                  <section className="rounded-3xl border border-black/[0.08] bg-white p-6 shadow-sm sm:p-8">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FBE6DF] text-[#E85D3F]">
+                        <ImageIcon size={20} />
+                      </span>
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-[#E85D3F]">
+                          Event highlights
+                        </p>
+                        <h2 className="text-xl font-bold tracking-tight text-[#20201F]">
+                          After the event
+                        </h2>
+                      </div>
+                    </div>
 
-                <div className="py-5 space-y-3 text-xs text-[#77736E]">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={16} className="text-[#266B22]" />
-                    <span>Instant confirmation sent to your profile</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={16} className="text-[#266B22]" />
-                    <span>
-                      {event.registrationMode === "APPROVAL_REQUIRED"
-                        ? "Host will review your answers"
-                        : "Direct entry upon registration"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={16} className="text-[#266B22]" />
-                    <span>Cancel or update anytime from your dashboard</span>
-                  </div>
-                </div>
+                    {event.postEventDescription && (
+                      <p className="mt-5 whitespace-pre-line text-sm leading-relaxed text-[#77736E] sm:text-base">
+                        {event.postEventDescription}
+                      </p>
+                    )}
 
-                {event.isRegistered ||
-                (registrationCheck?.eventId === event.id &&
-                  registrationCheck.userId === user?.id &&
-                  registrationCheck.isRegistered) ? (
-                  <div
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C7E6C0] bg-[#EBF5E8] px-5 py-4 text-sm font-bold text-[#266B22]"
-                    role="status"
-                  >
-                    <CheckCircle2 size={18} />
-                    Registered
-                  </div>
-                ) : isAuthenticated &&
-                  (!registrationCheck ||
-                    registrationCheck.eventId !== event.id ||
-                    registrationCheck.userId !== user?.id) ? (
-                  <div
-                    className="flex w-full items-center justify-center rounded-xl border border-black/10 bg-[#FAF7F2] px-5 py-4 text-sm font-semibold text-[#77736E]"
-                    role="status"
-                  >
-                    Checking registration...
-                  </div>
-                ) : event.status === "APPROVED" ? (
-                  <button
-                    onClick={() => {
-                      const registrationPath = `/events/${event.id}/register`;
-                      navigate(
-                        isAuthenticated
-                          ? registrationPath
-                          : "/login",
-                        isAuthenticated
-                          ? undefined
-                          : { state: { redirectTo: registrationPath } }
-                      );
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#E85D3F] px-5 py-4 text-sm font-bold text-white shadow-md shadow-[#E85D3F]/20 transition hover:bg-[#20201F] hover:shadow-none cursor-pointer"
-                  >
-                    <Ticket size={18} />
-                    Register for Event
-                  </button>
-                ) : (
-                  <div className="rounded-xl bg-[#FEF5E7] p-4 text-center text-xs font-bold text-[#B45309]">
-                    Registration is unavailable because this event is currently {event.status.toLowerCase()}.
-                  </div>
+                    {!!event.postEventPhotos?.length && (
+                      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {event.postEventPhotos.map((photo) => (
+                          <button
+                            key={photo.id}
+                            type="button"
+                            onClick={() => setSelectedPhoto(photo.url)}
+                            aria-label={`View photo from ${event.title}`}
+                            className="group aspect-[4/3] cursor-zoom-in overflow-hidden rounded-xl bg-[#FAF7F2]"
+                          >
+                            <img
+                              src={photo.url}
+                              alt={`Photo from ${event.title}`}
+                              loading="lazy"
+                              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </section>
                 )}
-
-                <p className="mt-4 text-center text-[11px] text-[#77736E]">
-                  Safe & verified event hosted on Eventra.
-                </p>
-              </div>
-            </div>
+            </aside>
           </div>
         )}
       </main>
+
+      {selectedPhoto && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Event photo"
+          onClick={(mouseEvent) => {
+            if (mouseEvent.target === mouseEvent.currentTarget) {
+              setSelectedPhoto(null);
+            }
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setSelectedPhoto(null)}
+            aria-label="Close photo viewer"
+            className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+          >
+            <X size={24} />
+          </button>
+          <img
+            src={selectedPhoto}
+            alt={`Photo from ${event?.title ?? "event"}`}
+            className="max-h-[85vh] max-w-full rounded-xl object-contain shadow-2xl"
+          />
+        </div>
+      )}
 
       <Footer />
     </div>

@@ -39,6 +39,12 @@ export async function createRegistration(
             });
         }
 
+        if (event.endTime <= new Date()) {
+            return res.status(400).json({
+                message: "Registration is closed because this event has ended"
+            });
+        }
+
         const existingRegistration =
             await prisma.registration.findFirst({
                 where: {
@@ -558,7 +564,17 @@ export async function getMyRegistrations(req: Request, res: Response) {
                 }
             },
             include: {
-                event: true,
+                event: {
+                    include: {
+                        feedbacks: {
+                            where: { userId },
+                            select: {
+                                rating: true,
+                                comment: true
+                            }
+                        }
+                    }
+                },
                 answers: {
                     include: {
                         field: true
@@ -575,9 +591,22 @@ export async function getMyRegistrations(req: Request, res: Response) {
             }
         });
 
+        const registrationsWithFeedbackAvailability = registrations.map(
+            (registration) => ({
+                ...registration,
+                event: registration.event
+                    ? {
+                          ...registration.event,
+                          feedbackAvailable:
+                              registration.event.endTime <= new Date()
+                      }
+                    : null
+            })
+        );
+
         return res.status(200).json({
             message: "Registrations fetched successfully",
-            registrations
+            registrations: registrationsWithFeedbackAvailability
         });
 
     } catch (error) {

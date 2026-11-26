@@ -8,7 +8,7 @@ import {
   MapPin,
   Search,
   Sparkles,
-  Ticket,
+  Star,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -20,8 +20,11 @@ interface EventItem {
   title: string;
   description: string;
   category: string;
+  coverImageUrl?: string | null;
   startTime: string;
   endTime: string;
+  averageRating?: number;
+  feedbackCount?: number;
   venue?: {
     name: string;
     location: string;
@@ -31,6 +34,7 @@ interface EventItem {
 export default function Home() {
   const navigate = useNavigate();
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [completedEvents, setCompletedEvents] = useState<EventItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -48,7 +52,20 @@ export default function Home() {
         setLoading(false);
       }
     }
+
+    async function loadCompletedEvents() {
+      try {
+        const response = await api.get("/events/completed");
+        setCompletedEvents(
+          Array.isArray(response.data.events) ? response.data.events : []
+        );
+      } catch (err) {
+        console.warn("Could not load recently completed events:", err);
+      }
+    }
+
     void loadEvents();
+    void loadCompletedEvents();
   }, []);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -75,7 +92,7 @@ export default function Home() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 py-16 md:grid-cols-2 md:px-10 md:py-24 lg:gap-16">
+        <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 py-16 md:px-10 md:py-24 lg:grid-cols-2 lg:gap-16">
           <div>
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#E85D3F]/30 bg-[#E85D3F]/10 px-4 py-2 text-xs font-bold tracking-[0.15em] text-[#C64A30]">
               <Sparkles size={15} />
@@ -180,15 +197,6 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="absolute -bottom-6 -left-4 hidden items-center gap-3 rounded-2xl bg-white p-4 shadow-xl border border-black/5 sm:flex md:-left-8">
-              <div className="rounded-xl bg-[#FBE6DF] p-3 text-[#E85D3F]">
-                <Ticket size={24} />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-[#20201F]">Your next story</p>
-                <p className="text-xs text-[#77736E]">Starts with an RSVP.</p>
-              </div>
-            </div>
           </div>
         </section>
 
@@ -296,7 +304,7 @@ export default function Home() {
                   className="group overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg flex flex-col justify-between"
                 >
                   <div>
-                    <EventImage category={event.category} className="h-36">
+                    <EventImage category={event.category} title={event.title} imageUrl={event.coverImageUrl} className="h-36">
                       <span className="flex items-center gap-1 text-xs font-medium text-white drop-shadow">
                         <Clock3 size={14} />
                         {new Date(event.startTime).toLocaleTimeString([], {
@@ -340,6 +348,77 @@ export default function Home() {
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-black/10 py-2.5 text-xs font-bold uppercase tracking-wider text-[#20201F] transition hover:bg-[#E85D3F] hover:text-white hover:border-[#E85D3F]"
                     >
                       View Details
+                      <ArrowRight size={14} />
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Recently Completed Events */}
+        <section className="mx-auto max-w-7xl px-6 pb-12 md:px-10 md:pb-16">
+          <div className="mb-10">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#E85D3F]">
+              Community favorites
+            </p>
+            <h2 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
+              Recently completed.
+            </h2>
+            <p className="mt-2 text-sm text-[#77736E]">
+              The highest-rated events from the past 90 days.
+            </p>
+          </div>
+
+          {completedEvents.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-black/15 bg-white p-8 text-center">
+              <Star size={30} className="mx-auto text-[#E85D3F]" />
+              <p className="mt-3 font-semibold text-[#20201F]">
+                No attendee-rated events yet
+              </p>
+              <p className="mt-1 text-sm text-[#77736E]">
+                Completed events will appear here after attendees share feedback.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3">
+              {completedEvents.map((event) => (
+                <article
+                  key={event.id}
+                  className="group overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <EventImage category={event.category} title={event.title} imageUrl={event.coverImageUrl} className="h-36" />
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-xl font-bold tracking-tight text-[#20201F] transition group-hover:text-[#E85D3F]">
+                        <Link to={`/events/${event.id}`}>{event.title}</Link>
+                      </h3>
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#FFF4E5] px-2.5 py-1 text-xs font-bold text-[#9A5A00]">
+                        <Star size={13} className="fill-current" />
+                        {event.averageRating?.toFixed(1)}
+                      </span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#77736E]">
+                      {event.description}
+                    </p>
+                    <div className="mt-4 flex items-center justify-between border-t border-black/10 pt-4 text-xs text-[#77736E]">
+                      <span>
+                        {new Date(event.endTime).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                      <span>
+                        {event.feedbackCount}{" "}
+                        {event.feedbackCount === 1 ? "review" : "reviews"}
+                      </span>
+                    </div>
+                    <Link
+                      to={`/events/${event.id}`}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-black/10 py-2.5 text-xs font-bold uppercase tracking-wider text-[#20201F] transition hover:bg-[#E85D3F] hover:text-white hover:border-[#E85D3F]"
+                    >
+                      View Event
                       <ArrowRight size={14} />
                     </Link>
                   </div>

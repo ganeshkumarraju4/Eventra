@@ -11,6 +11,7 @@ import {
   XCircle,
   CalendarClock,
   History,
+  ImagePlus,
   Layers,
   X,
   FileText,
@@ -41,8 +42,12 @@ interface EventItem {
   category: string;
   type: "PUBLIC" | "PRIVATE";
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  isCompleted: boolean;
+  coverImageUrl: string | null;
   maxParticipants: number | null;
   booking: Booking | null;
+  postEventDescription: string | null;
+  postEventPhotos: { id: string; url: string }[];
 }
 
 interface ChangeRequest {
@@ -83,6 +88,13 @@ export default function MyEvents() {
     reason: "",
   });
   const [submittingRequest, setSubmittingRequest] = useState(false);
+  const [postEvent, setPostEvent] = useState<EventItem | null>(null);
+  const [postEventDescription, setPostEventDescription] = useState("");
+  const [postEventPhotos, setPostEventPhotos] = useState<File[]>([]);
+  const [savingPostEvent, setSavingPostEvent] = useState(false);
+  const [coverEvent, setCoverEvent] = useState<EventItem | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [savingCover, setSavingCover] = useState(false);
 
   const [viewingRequestsEvent, setViewingRequestsEvent] = useState<EventItem | null>(null);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
@@ -309,6 +321,84 @@ export default function MyEvents() {
     }
   };
 
+  const openPostEventContent = (event: EventItem) => {
+    setActionError("");
+    setPostEvent(event);
+    setPostEventDescription(event.postEventDescription ?? "");
+    setPostEventPhotos([]);
+  };
+
+  const handleSavePostEventContent = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+    if (!postEvent) return;
+
+    if (
+      postEventPhotos.length + (postEvent.postEventPhotos?.length ?? 0) > 8
+    ) {
+      setActionError("An event can have up to 8 photos. Select fewer photos.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("postEventDescription", postEventDescription);
+    postEventPhotos.forEach((photo) => formData.append("photos", photo));
+
+    setSavingPostEvent(true);
+    setActionError("");
+    try {
+      await api.post(`/events/${postEvent.id}/post-event-content`, formData);
+      setPostEvent(null);
+      await loadEvents();
+    } catch (err: unknown) {
+      const axiosError = err as {
+        response?: { data?: { message?: string } };
+      };
+      setActionError(
+        axiosError.response?.data?.message ||
+          "Unable to save the event recap. Please try again."
+      );
+    } finally {
+      setSavingPostEvent(false);
+    }
+  };
+
+  const handleSaveCoverImage = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+    if (!coverEvent || !coverFile) return;
+
+    if (
+      !["image/jpeg", "image/png", "image/webp"].includes(coverFile.type) ||
+      coverFile.size > 5 * 1024 * 1024
+    ) {
+      setActionError("Choose a JPEG, PNG, or WebP image no larger than 5 MB.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("coverImage", coverFile);
+    setSavingCover(true);
+    setActionError("");
+    try {
+      await api.put(`/events/${coverEvent.id}/cover-image`, formData);
+      setCoverEvent(null);
+      setCoverFile(null);
+      await loadEvents();
+    } catch (err: unknown) {
+      const axiosError = err as {
+        response?: { data?: { message?: string } };
+      };
+      setActionError(
+        axiosError.response?.data?.message || "Unable to update cover image."
+      );
+    } finally {
+      setSavingCover(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FAF7F2] text-[#20201F] flex flex-col justify-between">
       <Navbar />
@@ -392,21 +482,28 @@ export default function MyEvents() {
             </Link>
           </div>
         ) : (
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
+          <div className="mt-8 grid gap-6 md:grid-cols-2 2xl:grid-cols-3">
             {events.map((event) => {
               const venue = event.booking?.venue;
 
               return (
                 <article
                   key={event.id}
-                  className="flex flex-col justify-between overflow-hidden rounded-3xl border border-black/[0.08] bg-white shadow-sm transition hover:shadow-md"
+                  className="flex flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-md"
                 >
-                  <EventImage category={event.category} className="h-36 sm:h-40" />
-                  <div className="flex flex-1 flex-col justify-between p-6 sm:p-7">
-                  <div>
-                    <div className="flex flex-wrap items-center justify-end gap-2">
+                  <EventImage
+                    category={event.category}
+                    title={event.title}
+                    imageUrl={event.coverImageUrl}
+                    className="h-36"
+                  />
+                  <div className="flex min-w-0 flex-1 flex-col p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <h2 className="min-w-0 text-lg font-bold leading-snug text-[#20201F]">
+                        {event.title}
+                      </h2>
                       <span
-                        className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+                        className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${
                           statusBadgeStyles[event.status] ??
                           "bg-gray-100 text-gray-700"
                         }`}
@@ -414,17 +511,76 @@ export default function MyEvents() {
                         {event.status}
                       </span>
                     </div>
-
-                    <h2 className="mt-4 text-2xl font-bold text-[#20201F]">
-                      {event.title}
-                    </h2>
-
-                    <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-[#77736E]">
+                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#77736E]">
                       {event.description || "No description provided."}
                     </p>
 
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {event.status !== "CANCELLED" &&
+                        event.status !== "REJECTED" && (
+                          <button
+                            onClick={() => {
+                              setActionError("");
+                              setCoverEvent(event);
+                              setCoverFile(null);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#20201F] transition hover:border-[#E85D3F] hover:text-[#C64A30]"
+                          >
+                            <ImagePlus size={13} />
+                            {event.coverImageUrl ? "Change cover" : "Add cover"}
+                          </button>
+                        )}
+
+                      {event.status === "APPROVED" && event.isCompleted && (
+                        <button
+                          onClick={() => openPostEventContent(event)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E85D3F]/30 bg-[#E85D3F]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#C64A30] transition hover:bg-[#E85D3F]/20"
+                        >
+                          <ImagePlus size={13} />
+                          {event.postEventDescription || event.postEventPhotos?.length
+                            ? "Edit recap"
+                            : "Add recap"}
+                        </button>
+                      )}
+                    </div>
+
+                    {event.isCompleted &&
+                      (event.postEventDescription ||
+                        event.postEventPhotos.length > 0) && (
+                        <section className="mt-4 rounded-xl border border-[#E85D3F]/15 bg-[#FAF7F2] p-3">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-[#C64A30]">
+                            Event recap
+                          </h3>
+                          {event.postEventDescription && (
+                            <p className="mt-1 line-clamp-2 whitespace-pre-line text-xs leading-relaxed text-[#77736E]">
+                              {event.postEventDescription}
+                            </p>
+                          )}
+                          {event.postEventPhotos.length > 0 && (
+                            <div className="mt-2 grid grid-cols-3 gap-2">
+                              {event.postEventPhotos.map((photo) => (
+                                <a
+                                  key={photo.id}
+                                  href={photo.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="overflow-hidden rounded-lg bg-white"
+                                >
+                                  <img
+                                    src={photo.url}
+                                    alt={`Photo from ${event.title}`}
+                                    loading="lazy"
+                                    className="h-16 w-full rounded-md object-cover transition hover:scale-105"
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+                      )}
+
                     {/* Metadata */}
-                    <div className="mt-6 space-y-2.5 border-t border-black/5 pt-5 text-xs text-[#77736E]">
+                    <div className="mt-4 grid gap-2 border-t border-black/5 pt-4 text-xs text-[#77736E]">
                       <div className="flex items-center gap-2 font-medium text-[#20201F]">
                         <CalendarDays size={16} className="text-[#E85D3F]" />
                         <span>
@@ -469,34 +625,30 @@ export default function MyEvents() {
                         </div>
                       )}
                     </div>
-                  </div>
-
-                  {/* Actions Grid */}
-                  <div className="mt-8 border-t border-black/10 pt-5 space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
+                    {/* Actions Grid */}
+                    <div className="mt-4 grid grid-cols-2 gap-2 border-t border-black/10 pt-4">
                       <Link
                         to={`/events/${event.id}`}
-                        className="flex items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-[#FAF7F2] py-2.5 text-xs font-bold uppercase tracking-wider text-[#20201F] hover:bg-[#E85D3F] hover:text-white transition"
+                        className="flex items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-[#FAF7F2] py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#20201F] hover:bg-[#E85D3F] hover:text-white transition"
                       >
                         Public Page
                       </Link>
 
-                      {event.status !== "REJECTED" && event.status !== "CANCELLED" && (
+                      {event.status !== "REJECTED" &&
+                        event.status !== "CANCELLED" && (
                         <button
                           onClick={() => handleEdit(event)}
-                          className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 py-2.5 text-xs font-bold uppercase tracking-wider text-amber-800 hover:bg-amber-100 transition"
+                          className="flex items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 py-2.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 hover:bg-amber-100 transition"
                         >
                           <Pencil size={13} />
                           Edit Info
                         </button>
                       )}
-                    </div>
-
                     {event.status !== "REJECTED" && event.status !== "CANCELLED" && (
-                      <div className="grid grid-cols-2 gap-2">
+                      <>
                         <Link
                           to={`/events/${event.id}/registration-fields`}
-                          className="flex items-center justify-center gap-1.5 rounded-xl border border-black/15 bg-white py-2.5 text-xs font-bold uppercase tracking-wider text-[#20201F] hover:bg-[#FAF7F2] transition"
+                          className="flex items-center justify-center gap-1.5 rounded-lg border border-black/15 bg-white py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#20201F] hover:bg-[#FAF7F2] transition"
                         >
                           <FileText size={13} />
                           Custom Form
@@ -505,24 +657,24 @@ export default function MyEvents() {
                         {event.status === "APPROVED" ? (
                           <Link
                             to={`/events/${event.id}/registrations`}
-                            className="flex items-center justify-center gap-1.5 rounded-xl bg-[#20201F] py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#E85D3F] transition"
+                            className="flex items-center justify-center gap-1.5 rounded-lg bg-[#20201F] py-2.5 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-[#E85D3F] transition"
                           >
                             <Users size={13} />
                             Attendees
                           </Link>
                         ) : (
-                          <div className="flex items-center justify-center py-2.5 text-xs text-[#77736E] italic bg-[#FAF7F2] rounded-xl">
+                          <div className="flex items-center justify-center rounded-lg bg-[#FAF7F2] py-2.5 text-[10px] italic text-[#77736E]">
                             Pending Review
                           </div>
                         )}
-                      </div>
+                      </>
                     )}
 
                     {event.status === "APPROVED" && (
-                      <div className="grid grid-cols-2 gap-2">
+                      <>
                         <button
                           onClick={() => void openChangeRequest(event)}
-                          className="flex items-center justify-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 py-2.5 text-xs font-bold uppercase tracking-wider text-purple-800 hover:bg-purple-100 transition"
+                          className="flex items-center justify-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 py-2.5 text-[10px] font-bold uppercase tracking-wider text-purple-800 hover:bg-purple-100 transition"
                         >
                           <CalendarClock size={13} />
                           Reschedule
@@ -530,25 +682,27 @@ export default function MyEvents() {
 
                         <button
                           onClick={() => void handleViewChangeRequests(event)}
-                          className="flex items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-[#FAF7F2] py-2.5 text-xs font-bold uppercase tracking-wider text-[#77736E] hover:text-[#20201F] transition"
+                          className="flex items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-[#FAF7F2] py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#77736E] hover:text-[#20201F] transition"
                         >
                           <History size={13} />
                           Requests
                         </button>
-                      </div>
+                      </>
                     )}
 
-                    {event.status !== "REJECTED" && event.status !== "CANCELLED" && (
+                    {event.status !== "REJECTED" &&
+                      event.status !== "CANCELLED" &&
+                      !event.isCompleted && (
                       <button
                         onClick={() => void handleCancelEvent(event)}
                         disabled={cancellingEventId === event.id}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50 py-2.5 text-xs font-bold uppercase tracking-wider text-red-700 hover:bg-red-100 transition disabled:opacity-50"
+                        className="col-span-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 py-2.5 text-[10px] font-bold uppercase tracking-wider text-red-700 hover:bg-red-100 transition disabled:opacity-50"
                       >
                         <XCircle size={14} />
                         {cancellingEventId === event.id ? "Cancelling..." : "Cancel Event"}
                       </button>
                     )}
-                  </div>
+                    </div>
                   </div>
                 </article>
               );
@@ -669,6 +823,154 @@ export default function MyEvents() {
                 </div>
               </form>
             </div>
+          </div>
+        )}
+
+        {/* Modal: Post-event recap */}
+        {postEvent && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
+            <form
+              onSubmit={handleSavePostEventContent}
+              className="my-8 w-full max-w-xl rounded-3xl border border-black/10 bg-white p-6 shadow-2xl sm:p-8"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-black/10 pb-4">
+                <div>
+                  <h2 className="text-xl font-black text-[#20201F]">
+                    Event recap
+                  </h2>
+                  <p className="mt-1 text-sm text-[#77736E]">{postEvent.title}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPostEvent(null)}
+                  disabled={savingPostEvent}
+                  className="rounded-full p-1.5 text-[#77736E] hover:bg-black/5"
+                  aria-label="Close event recap"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <label className="mt-5 block text-sm font-bold text-[#20201F]">
+                How did it go?
+                <textarea
+                  value={postEventDescription}
+                  onChange={(event) => setPostEventDescription(event.target.value)}
+                  maxLength={5000}
+                  rows={5}
+                  placeholder="Share highlights and memories from your event..."
+                  className="mt-2 w-full resize-y rounded-xl border border-black/15 p-3 text-sm font-normal outline-none focus:border-[#E85D3F]"
+                />
+              </label>
+
+              <label className="mt-5 block text-sm font-bold text-[#20201F]">
+                Event photos (up to 8 total, 5 MB each)
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  onChange={(event) =>
+                    setPostEventPhotos(Array.from(event.target.files ?? []))
+                  }
+                  className="mt-2 block w-full rounded-xl border border-black/15 bg-white p-3 text-sm font-normal file:mr-3 file:rounded-lg file:border-0 file:bg-[#E85D3F]/10 file:px-3 file:py-2 file:text-xs file:font-bold file:text-[#C64A30]"
+                />
+              </label>
+              <p className="mt-2 text-xs text-[#77736E]">
+                {postEvent.postEventPhotos?.length ?? 0} photo(s) already uploaded.
+                Add only the remaining photos.
+              </p>
+
+              <div className="mt-6 flex justify-end gap-3 border-t border-black/10 pt-5">
+                <button
+                  type="button"
+                  onClick={() => setPostEvent(null)}
+                  disabled={savingPostEvent}
+                  className="rounded-xl border border-black/15 px-4 py-2.5 text-sm font-bold text-[#20201F] hover:bg-[#FAF7F2]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    savingPostEvent ||
+                    (!postEventDescription.trim() && postEventPhotos.length === 0)
+                  }
+                  className="rounded-xl bg-[#E85D3F] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#20201F] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingPostEvent ? "Saving..." : "Save recap"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Modal: Event cover image */}
+        {coverEvent && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <form
+              onSubmit={handleSaveCoverImage}
+              className="w-full max-w-lg rounded-3xl border border-black/10 bg-white p-6 shadow-2xl sm:p-8"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-black/10 pb-4">
+                <div>
+                  <h2 className="text-xl font-black text-[#20201F]">
+                    Event cover image
+                  </h2>
+                  <p className="mt-1 text-sm text-[#77736E]">{coverEvent.title}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCoverEvent(null)}
+                  disabled={savingCover}
+                  className="rounded-full p-1.5 text-[#77736E] hover:bg-black/5"
+                  aria-label="Close cover image form"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {coverEvent.coverImageUrl && (
+                <img
+                  src={coverEvent.coverImageUrl}
+                  alt={`Current cover for ${coverEvent.title}`}
+                  className="mt-5 h-44 w-full rounded-xl object-cover"
+                />
+              )}
+
+              <label className="mt-5 block text-sm font-bold text-[#20201F]">
+                Choose a new image
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  required
+                  onChange={(event) =>
+                    setCoverFile(event.target.files?.[0] ?? null)
+                  }
+                  className="mt-2 block w-full rounded-xl border border-black/15 bg-white p-3 text-sm font-normal file:mr-3 file:rounded-lg file:border-0 file:bg-[#E85D3F]/10 file:px-3 file:py-2 file:text-xs file:font-bold file:text-[#C64A30]"
+                />
+              </label>
+              <p className="mt-2 text-xs text-[#77736E]">
+                JPEG, PNG, or WebP up to 5 MB.
+              </p>
+
+              <div className="mt-6 flex justify-end gap-3 border-t border-black/10 pt-5">
+                <button
+                  type="button"
+                  onClick={() => setCoverEvent(null)}
+                  disabled={savingCover}
+                  className="rounded-xl border border-black/15 px-4 py-2.5 text-sm font-bold text-[#20201F] hover:bg-[#FAF7F2]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCover || !coverFile}
+                  className="rounded-xl bg-[#E85D3F] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#20201F] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingCover ? "Uploading..." : "Save cover"}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 

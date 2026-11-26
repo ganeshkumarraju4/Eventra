@@ -31,6 +31,7 @@ interface EventItem {
   title: string;
   description: string;
   category: string;
+  coverImageUrl?: string | null;
   type: "PUBLIC" | "PRIVATE";
   startTime: string;
   endTime: string;
@@ -293,7 +294,7 @@ export default function Events() {
                 key={event.id}
                 className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
               >
-                <EventImage category={event.category} className="h-36">
+                <EventImage category={event.category} title={event.title} imageUrl={event.coverImageUrl} className="h-36">
                   <span className="rounded-full border border-white/25 bg-black/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-sm">
                     {event.type}
                   </span>

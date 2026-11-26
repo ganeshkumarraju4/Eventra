@@ -356,7 +356,8 @@ export async function getEvent(req: Request, res: Response) {
                     include: {
                         venue: true
                     }
-                }
+                },
+                postEventPhotos: { orderBy: { createdAt: "asc" } }
             }
         });
 
@@ -394,7 +395,8 @@ export async function getEvent(req: Request, res: Response) {
             event: {
                 ...event,
                 venue: event.booking?.venue ?? null,
-                isRegistered: registration !== null
+                isRegistered: registration !== null,
+                isCompleted: event.endTime <= new Date()
             }
         });
     } catch (error) {
@@ -421,15 +423,23 @@ export async function getMyEvents(req: Request, res: Response) {
             venue: true,
           },
         },
+        postEventPhotos: {
+          select: { id: true, url: true },
+        },
       },
       orderBy: {
         createdAt: "desc",
       },
     });
 
+    const eventsWithCompletionStatus = events.map((event) => ({
+      ...event,
+      isCompleted: event.endTime <= new Date(),
+    }));
+
     return res.status(200).json({
       message: "Your events fetched successfully",
-      events,
+      events: eventsWithCompletionStatus,
     });
   } catch (error) {
     console.error("Get my events error:", error);

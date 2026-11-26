@@ -26,6 +26,7 @@ interface EventItem {
   title: string;
   description?: string;
   category: string;
+  coverImageUrl?: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
   startTime: string;
   endTime: string;
@@ -306,6 +307,7 @@ export default function AdminDashboard() {
 
   const pendingEventsCount = events.filter((e) => e.status === "PENDING").length;
   const approvedEventsCount = events.filter((e) => e.status === "APPROVED").length;
+  const isSyncing = eventsLoading || venuesLoading || requestsLoading;
 
   const filteredEvents = events.filter(
     (e) => eventFilter === "ALL" || e.status === eventFilter
@@ -343,15 +345,17 @@ export default function AdminDashboard() {
 
           <div className="flex items-center gap-3">
             <button
+              type="button"
+              disabled={isSyncing}
               onClick={() => {
                 void loadEvents();
                 void loadVenues();
                 void loadChangeRequests();
               }}
-              className="inline-flex items-center gap-2 rounded-xl border border-black/15 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[#20201F] hover:bg-[#FAF7F2] transition"
+              className="inline-flex items-center gap-2 rounded-xl border border-black/15 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[#20201F] transition hover:bg-[#FAF7F2] disabled:cursor-wait disabled:opacity-60"
             >
-              <RefreshCw size={14} />
-              Sync Data
+              <RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} />
+              {isSyncing ? "Syncing..." : "Sync Data"}
             </button>
           </div>
         </div>
@@ -371,7 +375,7 @@ export default function AdminDashboard() {
         )}
 
         {/* Top Metric Cards */}
-        <div className="mt-8 grid gap-4 sm:grid-cols-4">
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between text-[#77736E]">
               <span className="text-xs font-bold uppercase tracking-wider">Pending Events</span>
@@ -406,10 +410,19 @@ export default function AdminDashboard() {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="mt-10 flex border-b border-black/10">
+        <div
+          className="mt-10 flex overflow-x-auto border-b border-black/10"
+          role="tablist"
+          aria-label="Admin dashboard sections"
+        >
           <button
+            type="button"
+            role="tab"
+            id="admin-events-tab"
+            aria-controls="admin-events-panel"
+            aria-selected={activeTab === "EVENTS"}
             onClick={() => setActiveTab("EVENTS")}
-            className={`px-6 py-3.5 text-xs font-bold uppercase tracking-wider border-b-2 transition ${
+            className={`shrink-0 whitespace-nowrap px-4 py-3.5 text-xs font-bold uppercase tracking-wider border-b-2 transition sm:px-6 ${
               activeTab === "EVENTS"
                 ? "border-[#E85D3F] text-[#E85D3F]"
                 : "border-transparent text-[#77736E] hover:text-[#20201F]"
@@ -419,8 +432,13 @@ export default function AdminDashboard() {
           </button>
 
           <button
+            type="button"
+            role="tab"
+            id="admin-venues-tab"
+            aria-controls="admin-venues-panel"
+            aria-selected={activeTab === "VENUES"}
             onClick={() => setActiveTab("VENUES")}
-            className={`px-6 py-3.5 text-xs font-bold uppercase tracking-wider border-b-2 transition ${
+            className={`shrink-0 whitespace-nowrap px-4 py-3.5 text-xs font-bold uppercase tracking-wider border-b-2 transition sm:px-6 ${
               activeTab === "VENUES"
                 ? "border-[#E85D3F] text-[#E85D3F]"
                 : "border-transparent text-[#77736E] hover:text-[#20201F]"
@@ -430,8 +448,13 @@ export default function AdminDashboard() {
           </button>
 
           <button
+            type="button"
+            role="tab"
+            id="admin-change-requests-tab"
+            aria-controls="admin-change-requests-panel"
+            aria-selected={activeTab === "CHANGE_REQUESTS"}
             onClick={() => setActiveTab("CHANGE_REQUESTS")}
-            className={`px-6 py-3.5 text-xs font-bold uppercase tracking-wider border-b-2 transition ${
+            className={`shrink-0 whitespace-nowrap px-4 py-3.5 text-xs font-bold uppercase tracking-wider border-b-2 transition sm:px-6 ${
               activeTab === "CHANGE_REQUESTS"
                 ? "border-[#E85D3F] text-[#E85D3F]"
                 : "border-transparent text-[#77736E] hover:text-[#20201F]"
@@ -443,7 +466,12 @@ export default function AdminDashboard() {
 
         {/* TAB 1: Events Management */}
         {activeTab === "EVENTS" && (
-          <section className="mt-8 space-y-6">
+          <section
+            id="admin-events-panel"
+            role="tabpanel"
+            aria-labelledby="admin-events-tab"
+            className="mt-8 space-y-6"
+          >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-[#20201F]">Submitted Events</h2>
@@ -543,6 +571,8 @@ export default function AdminDashboard() {
                   >
                     <EventImage
                       category={event.category}
+                      title={event.title}
+                      imageUrl={event.coverImageUrl}
                       className="h-32 w-full lg:h-auto lg:min-h-[180px] lg:w-48"
                     />
                     <div className="flex flex-1 flex-col gap-6 p-6 lg:flex-row lg:items-center lg:justify-between">
@@ -621,7 +651,12 @@ export default function AdminDashboard() {
 
         {/* TAB 2: Venues Management */}
         {activeTab === "VENUES" && (
-          <section className="mt-8 space-y-6">
+          <section
+            id="admin-venues-panel"
+            role="tabpanel"
+            aria-labelledby="admin-venues-tab"
+            className="mt-8 space-y-6"
+          >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-[#20201F]">Physical Venues</h2>
@@ -709,7 +744,12 @@ export default function AdminDashboard() {
 
         {/* TAB 3: Change Requests Management */}
         {activeTab === "CHANGE_REQUESTS" && (
-          <section className="mt-8 space-y-6">
+          <section
+            id="admin-change-requests-panel"
+            role="tabpanel"
+            aria-labelledby="admin-change-requests-tab"
+            className="mt-8 space-y-6"
+          >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-[#20201F]">Pending Change Requests</h2>

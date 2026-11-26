@@ -34,6 +34,7 @@ interface EventItem {
   organizerId?: string;
   status?: string;
   category?: string;
+  coverImageUrl?: string | null;
   booking?: {
     venue?: {
       id: string;
@@ -377,7 +378,7 @@ export default function Dashboard() {
                       key={event.id}
                       className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-md"
                     >
-                      <EventImage category={event.category} className="h-32">
+                      <EventImage category={event.category} title={event.title} imageUrl={event.coverImageUrl} className="h-32">
                         {event.startTime && (
                           <span className="flex items-center gap-1 text-xs font-medium text-white drop-shadow">
                             <Clock3 size={13} />

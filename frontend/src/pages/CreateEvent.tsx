@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, MapPin, Send, Sparkles, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, MapPin, Send, Sparkles, CheckCircle2, AlertCircle, ImagePlus } from "lucide-react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -88,6 +88,8 @@ export default function CreateEvent() {
   const [venueError, setVenueError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [coverImage, setCoverImage] = useState<File | null>(null);
+  const [coverUploadWarning, setCoverUploadWarning] = useState("");
 
   const {
     register,
@@ -147,6 +149,16 @@ export default function CreateEvent() {
   async function onSubmit(values: EventFormValues) {
     setSubmitError("");
     setSuccessMessage("");
+    setCoverUploadWarning("");
+
+    if (
+      coverImage &&
+      (!["image/jpeg", "image/png", "image/webp"].includes(coverImage.type) ||
+        coverImage.size > 5 * 1024 * 1024)
+    ) {
+      setSubmitError("Choose a JPEG, PNG, or WebP cover image no larger than 5 MB.");
+      return;
+    }
 
     const payload = {
       title: values.title.trim(),
@@ -165,6 +177,25 @@ export default function CreateEvent() {
 
     try {
       const response = await api.post("/events", payload);
+
+      if (coverImage) {
+        const formData = new FormData();
+        formData.append("coverImage", coverImage);
+        try {
+          await api.put(
+            `/events/${response.data.event.id}/cover-image`,
+            formData
+          );
+        } catch (error) {
+          const uploadError = error as {
+            response?: { data?: { message?: string } };
+          };
+          setCoverUploadWarning(
+            uploadError.response?.data?.message ??
+              "Your event was created, but the cover image could not be uploaded. You can try again from My Events."
+          );
+        }
+      }
 
       setSuccessMessage(
         response.data.message || "Event submitted for admin approval!"
@@ -250,6 +281,11 @@ export default function CreateEvent() {
                     ? "This event is pending approval. You can review it from the admin dashboard."
                     : "Your event is currently pending administrator verification. Once approved, it will be listed in Explore Events."}
                 </p>
+                {coverUploadWarning && (
+                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                    {coverUploadWarning}
+                  </p>
+                )}
 
                 <div className="mt-4 flex flex-wrap gap-3">
                   <button
@@ -329,6 +365,26 @@ export default function CreateEvent() {
                     {errors.description.message}
                   </p>
                 )}
+              </div>
+
+              <div>
+                <label htmlFor="coverImage" className={`${labelClass} flex items-center gap-2`}>
+                  <ImagePlus size={15} className="text-[#E85D3F]" />
+                  Event Cover Image (Optional)
+                </label>
+                <input
+                  id="coverImage"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(event) =>
+                    setCoverImage(event.target.files?.[0] ?? null)
+                  }
+                  className={`${inputClass} file:mr-3 file:rounded-lg file:border-0 file:bg-[#E85D3F]/10 file:px-3 file:py-2 file:text-xs file:font-bold file:text-[#C64A30]`}
+                />
+                <p className="mt-1.5 text-[11px] text-[#77736E]">
+                  JPEG, PNG, or WebP up to 5 MB. Without a cover, we’ll keep the category image.
+                  {coverImage ? ` Selected: ${coverImage.name}` : ""}
+                </p>
               </div>
 
               <div className="grid gap-5 sm:grid-cols-2">
