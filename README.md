@@ -1,6 +1,6 @@
-# Event Manager
+# Eventra
 
-Event Manager is a full-stack web application for creating, managing, approving, and registering for events. It supports role-based workflows for users and administrators, venue availability checks, dynamic registration forms, and post-event content.
+Eventra is a full-stack web application for creating, managing, approving, and registering for events. It supports role-based workflows for users and administrators, venue availability checks, dynamic registration forms, and post-event content.
 
 ## Features
 
